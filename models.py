@@ -45,21 +45,25 @@ class Residual_Block(nn.Module):
         out += x
         return out
 
+
 class EDSR(nn.Module):
     def __init__(self, latent_dim= 256, n_resblocks = 32, rescale = 0.1, output_dim  = [251,121]):
         super(EDSR, self).__init__()
         self.output_dim = output_dim
         kernel_size = 3
-        #input convolution, output of this will be added
+        # Input convolution, output of this will be added.
         self.conv_first =  nn.Conv2d(1 ,latent_dim, kernel_size = kernel_size, stride=1, padding=1)
-        #resblocks block
+
+        # Resblocks block
         self.blocks = nn.Sequential()
 
         for res in range(n_resblocks):
-            self.blocks.add_module("Resblock {}".format(res), Residual_Block(latent_dim, kernel_size, rescale))
+            self.blocks.add_module("Resblock {}".format(res),
+                                   Residual_Block(latent_dim, kernel_size, rescale))
 
         #intermideate convolution
-        self.conv_inter = nn.Conv2d(latent_dim, latent_dim, kernel_size = kernel_size, stride = 1 ,padding = 1)
+        self.conv_inter = nn.Conv2d(
+            latent_dim, latent_dim, kernel_size = kernel_size, stride = 1 ,padding = 1)
 
         #upscaling , not used now
         """
@@ -68,14 +72,17 @@ class EDSR(nn.Module):
         
         upscale = 4
         self.upscale = nn.Sequential(
-            nn.Conv2d(in_channels=latent_dim, out_channels=latent_dim*upscale, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.Conv2d(in_channels=latent_dim, out_channels=latent_dim*upscale,
+                kernel_size=3, stride=1, padding=1, bias=False),
             nn.PixelShuffle(2),
-            nn.Conv2d(in_channels=latent_dim, out_channels=latent_dim*upscale, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.Conv2d(in_channels=latent_dim, out_channels=latent_dim*upscale,
+                kernel_size=3, stride=1, padding=1, bias=False),
             nn.PixelShuffle(2),
         )
         """
         #last convolution
-        self.conv_last = nn.Conv2d(latent_dim , 1 , kernel_size=kernel_size, stride = 1, padding = 1)
+        self.conv_last = nn.Conv2d(latent_dim, 1, kernel_size=kernel_size,
+                                   stride=1, padding=1)
 
     def forward(self, x):
         x = nn.functional.interpolate(x, size=self.output_dim)
@@ -88,14 +95,8 @@ class EDSR(nn.Module):
         return out
 
 
-
-
-
-
-
-
 class Discriminator(nn.Module):
-    def __init__(self):
+    def __init__(self, big_data=False):
         """
         DCGAN discriminator modified to fit the data.
         """
@@ -123,14 +124,24 @@ class Discriminator(nn.Module):
             nn.BatchNorm2d(512),
         )
 
-        self.fc = nn.Sequential(
-            nn.Linear(5 * 512, 2048),
-            nn.LeakyReLU(0.2),
-            nn.BatchNorm1d(2048),
+        if not big_data:
+            self.fc = nn.Sequential(
+                nn.Linear(5 * 512, 2048),
+                nn.LeakyReLU(0.2),
+                nn.BatchNorm1d(2048),
 
-            nn.Linear(2048, 1),
-            nn.Sigmoid()
-        )
+                nn.Linear(2048, 1),
+                nn.Sigmoid()
+            )
+        else:
+            self.fc = nn.Sequential(
+                nn.Linear(7 * 5 * 512, 2048),
+                nn.LeakyReLU(0.2),
+                nn.BatchNorm1d(2048),
+
+                nn.Linear(2048, 1),
+                nn.Sigmoid()
+            )
 
     def forward(self, x):
         x = self.conv(x)
