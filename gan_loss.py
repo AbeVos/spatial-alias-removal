@@ -1,17 +1,19 @@
 import os
 import argparse
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-import numpy as np
+from tqdm import tqdm
+
 from math import log10
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 # from torchvision.utils import save_image
 
-from models import SRCNN, Discriminator, EDSR
+from models import SRCNN, Discriminator, EDSR, PatchGAN
 from dataset import Data
 
 
@@ -43,7 +45,7 @@ def train_epoch(G, D, optim_G, optim_D, train_dataloader, device='cuda:0'):
     mean_psnr = []
     criterion = nn.BCELoss()
 
-    for sample in train_dataloader:
+    for sample in tqdm(train_dataloader):
         lores_batch = sample['x'].to(device).float()
         hires_batch = sample['y'].to(device).float()
 
@@ -171,7 +173,7 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0'):
         # Transformed
         plt.subplot(num_rows, num_cols, num_cols*idx+4)
         if idx == 0:
-            plt.title("25m transformed")
+            plt.title("25m fk")
 
         lores = torch.nn.functional.interpolate(
             lores.unsqueeze(0), size=(251, 121))
@@ -183,7 +185,7 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0'):
 
         plt.subplot(num_rows, num_cols, num_cols*idx+5)
         if idx == 0:
-            plt.title("Superresolution transformed")
+            plt.title("Superresolution fk")
 
         superres = torch.rfft(superres, 2, normalized=True)
         superres = superres.pow(2).sum(-1).sqrt()
@@ -193,7 +195,7 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0'):
 
         plt.subplot(num_rows, num_cols, num_cols*idx+6)
         if idx == 0:
-            plt.title("12.5m transformed")
+            plt.title("12.5m fk")
 
         hires = torch.rfft(hires, 2, normalized=True)
         hires = hires.pow(2).sum(-1).sqrt()
@@ -202,7 +204,7 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0'):
         plt.axis('off')
 
     plt.tight_layout()
-    plt.savefig("images/gan_samples_{}.png".format(epoch))
+    plt.savefig(f"images/gan_samples_{epoch:04d}.png")
     plt.close()
 
 
@@ -257,7 +259,7 @@ def main():
 
     # Init generator model.
     if args.model == "SRCNN":
-        generator = SRCNN().to(device)
+        generator = SRCNN(input_dim=(251,61) , output_dim=output_dim).to(device)
     elif args.model == "EDSR":
         generator = EDSR(
             n_resblocks=args.num_res_blocks, output_dim=output_dim,
@@ -265,6 +267,7 @@ def main():
 
     # Init discriminator model.
     discriminator = Discriminator(args.is_big_data).to(device)
+    # discriminator = PatchGAN().to(device)
 
     # Optimisers
     optim_G = optim.Adam(generator.parameters(), lr=args.lr)
