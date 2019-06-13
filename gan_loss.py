@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
-from tqdm import tqdm
+import json
 
 from math import log10
 from torch.utils.data import DataLoader, random_split
@@ -45,7 +45,7 @@ def train_epoch(G, D, optim_G, optim_D, train_dataloader, device='cuda:0'):
     mean_psnr = []
     criterion = nn.BCELoss()
 
-    for sample in tqdm(train_dataloader):
+    for sample in train_dataloader:
         lores_batch = sample['x'].to(device).float()
         hires_batch = sample['y'].to(device).float()
 
@@ -124,7 +124,7 @@ def eval_epoch(G, D, test_dataloader, device='cuda:0'):
     return np.mean(mean_loss_G), np.mean(mean_loss_D), np.mean(mean_psnr)
 
 
-def plot_samples(generator, dataloader, epoch, device='cuda:0'):
+def plot_samples(generator, dataloader, epoch, device='cuda:0', results_directory="images"):
     """
     Plot a number of low- and high-resolution samples and the superresolution
     sample obtained from the lr image.
@@ -148,7 +148,7 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0'):
         plt.subplot(num_rows, num_cols, num_cols*idx+1)
 
         if idx == 0:
-            plt.title("25m")
+            plt.title("LR")
 
         plt.imshow(lores.squeeze().detach().cpu(),
                    interpolation='none', cmap='gray')
@@ -164,7 +164,7 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0'):
 
         plt.subplot(num_rows, num_cols, num_cols*idx+3)
         if idx == 0:
-            plt.title("12.5m")
+            plt.title("HR")
 
         plt.imshow(hires.squeeze().detach().cpu(),
                    interpolation='none', cmap='gray')
@@ -173,7 +173,7 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0'):
         # Transformed
         plt.subplot(num_rows, num_cols, num_cols*idx+4)
         if idx == 0:
-            plt.title("25m fk")
+            plt.title("LR fk")
 
         lores = torch.nn.functional.interpolate(
             lores.unsqueeze(0), size=(251, 121))
@@ -195,7 +195,7 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0'):
 
         plt.subplot(num_rows, num_cols, num_cols*idx+6)
         if idx == 0:
-            plt.title("12.5m fk")
+            plt.title("HR fk")
 
         hires = torch.rfft(hires, 2, normalized=True)
         hires = hires.pow(2).sum(-1).sqrt()
@@ -204,16 +204,33 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0'):
         plt.axis('off')
 
     plt.tight_layout()
-    plt.savefig(f"images/gan_samples_{epoch:04d}.png")
+    plt.savefig(f"{results_directory}/gan_samples_{epoch:04d}.png")
+    plt.close()
+
+def save_loss_plot(loss_g, loss_d, directory, is_val=False):
+    plt.figure()
+    plt.plot(loss_d, label="Discriminator loss")
+    plt.plot(loss_g, label="Generator loss")
+    plt.legend()
+    if is_val:
+        plt.savefig("{}/gan_loss_val.png".format(directory))
+    else:
+        plt.savefig("{}/gan_loss.png".format(directory))
     plt.close()
 
 
 def main():
+    #creating new image directory
+    results_directory = 'results_{}'.format(args.experiment_num)
+    os.makedirs(results_directory, exist_ok=True)
+    #saving arguments for reproducibility
+    with open('{}/arguments.txt'.format(results_directory), 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
     # For plotting
     plt.rcParams["figure.figsize"] = (10, 10)
 
     device = torch.device(args.device)
-    os.makedirs('images/', exist_ok=True)
+
 
     # Determining the input data parameters and source
     if args.is_big_data:
@@ -254,8 +271,8 @@ def main():
 
     # Dataloaders
     train_dataloader = DataLoader(train_data, batch_size=args.batch_size,
-                                  drop_last=True)
-    test_dataloader = DataLoader(test_data, batch_size=2)
+                                  drop_last=True, shuffle = True)
+    test_dataloader = DataLoader(test_data, batch_size=2, shuffle =True)
 
     # Init generator model.
     if args.model == "SRCNN":
@@ -280,8 +297,8 @@ def main():
 
     plot_G = []
     plot_D = []
-    # plot_G_val = []
-    # plot_D_val = []
+    plot_G_val = []
+    plot_D_val = []
 
     for epoch in range(args.n_epochs):
         loss_G, loss_D, mean_psnr = train_epoch(
@@ -290,7 +307,7 @@ def main():
 
         # Report model performance.
         print(f"Epoch: {epoch}, G: {loss_G}, D: {loss_D}, PSNR: {mean_psnr}")
-
+        #evaluation
         if epoch % args.eval_interval == 0:
             loss_G_val, loss_D_val, mean_psnr_val = eval_epoch(
                 generator, discriminator, test_dataloader, device)
@@ -298,41 +315,40 @@ def main():
                   f"D: {loss_D_val}, PSNR: {mean_psnr_val}")
 
             # Schedule based on psnr or based on separate losses.
-            is_psnr_step = False
 
-            if is_psnr_step:
+
+            if args.is_psnr_step:
                 scheduler_g.step(mean_psnr_val)
                 scheduler_d.step(mean_psnr_val)
             else:
                 scheduler_g.step(loss_G_val)
                 scheduler_d.step(loss_D_val)
-
+            plot_G_val.append(loss_G_val)
+            plot_D_val.append(loss_D_val)
+        #plotting
         if epoch % args.save_interval == 0:
-            plot_samples(generator, test_dataloader, epoch, device=device)
+            plot_samples(generator, test_dataloader, epoch, device=device, results_directory = results_directory)
 
         plot_D.append(loss_D)
         plot_G.append(loss_G)
 
-        # Save intermediary plot of D and G losses.
-        plt.figure()
-        plt.plot(plot_D, label="Discriminator loss")
-        plt.plot(plot_G, label="Generator loss")
-        plt.legend()
-        plt.savefig("images/gan_loss.png")
-        plt.close()
 
-    torch.save(generator, 'generator')
+    # Save final plot of D and G losses.
+    save_loss_plot(plot_G, plot_D, results_directory)
+    save_loss_plot(plot_G_val, plot_D_val, results_directory, is_val=True)
+
+    torch.save(generator, '{}/generator'.format(results_directory))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--n_epochs', type=int, default=1000,
                         help="number of epochs")
-    parser.add_argument('--batch_size', type=int, default=16,
+    parser.add_argument('--batch_size', type=int, default=8,
                         help="batch size")
     parser.add_argument('--lr', type=float, default=0.002,
                         help="learning rate")
-    parser.add_argument('--latent_dim', type=int, default=64,
+    parser.add_argument('--latent_dim', type=int, default=128,
                         help="dimensionality of the latent space, only "
                         "relevant for EDSR")
     parser.add_argument('--num_res_blocks', type=int, default=8,
@@ -347,14 +363,21 @@ if __name__ == "__main__":
     parser.add_argument('--test_percentage', type=float, default=0.1,
                         help="Size of the test set")
     parser.add_argument('--save_interval', type=int, default=10,
-                        help="Save every SAVE_INTERVAL epochs")
-    parser.add_argument('--eval_interval', type=int, default=5,
+                        help="Save images every SAVE_INTERVAL epochs")
+    parser.add_argument('--eval_interval', type=int, default=2,
                         help="evaluate on test set ever eval_interval epochs")
     parser.add_argument('--device', type=str, default="cpu",
                         help="Training device 'cpu' or 'cuda:0'")
     parser.add_argument('--scheduler_patience', type=int, default="10",
-                        help="How many epochs of no improvement to consider "
-                        "Plateau")
+                        help="How many epochs of no improvement to consider Plateau")
+    parser.add_argument('--is_psnr_step', type=bool, default=False,
+                        help="Use PSNR for scheduler or separate losses")
+    parser.add_argument('--experiment_num', type=int, default=1,
+                        help="Id of the experiment running")
+
+
+
+
 
     args = parser.parse_args()
 
