@@ -17,7 +17,7 @@ from models import SRCNN, Discriminator, EDSR, PatchGAN
 from dataset import Data
 
 
-def train_epoch(G, D, optim_G, optim_D, train_dataloader, device='cuda:0'):
+def train_epoch(G, D, optim_G, optim_D, train_dataloader, device='cuda:0', criterion = nn.MSELoss()):
     """
     Train both generator and discriminator for a single epoch.
     Parameters
@@ -38,7 +38,7 @@ def train_epoch(G, D, optim_G, optim_D, train_dataloader, device='cuda:0'):
         Tuple containing the mean loss values for the generator and
         discriminator respectively.
     """
-    content_criterion = nn.MSELoss()
+    content_criterion = criterion
 
     mean_loss_G = []
     mean_loss_D = []
@@ -89,8 +89,8 @@ def train_epoch(G, D, optim_G, optim_D, train_dataloader, device='cuda:0'):
     return np.mean(mean_loss_G), np.mean(mean_loss_D), np.mean(mean_psnr)
 
 
-def eval_epoch(G, D, test_dataloader, device='cuda:0'):
-    content_criterion = nn.MSELoss()
+def eval_epoch(G, D, test_dataloader, device='cuda:0', criterion = nn.MSELoss()):
+    content_criterion = criterion
     mean_loss_G = []
     mean_loss_D = []
     mean_psnr = []
@@ -124,7 +124,7 @@ def eval_epoch(G, D, test_dataloader, device='cuda:0'):
     return np.mean(mean_loss_G), np.mean(mean_loss_D), np.mean(mean_psnr)
 
 
-def plot_samples(generator, dataloader, epoch, device='cuda:0', results_directory="images"):
+def plot_samples(generator, dataloader, epoch, device='cuda:0', results_directory="images", is_val=True):
     """
     Plot a number of low- and high-resolution samples and the superresolution
     sample obtained from the lr image.
@@ -140,8 +140,10 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0', results_director
 
     num_cols = 6
     num_rows = dataloader.batch_size
+    if not is_val:
+        num_rows = 2
 
-    plt.figure(figsize=(9, 3 * dataloader.batch_size))
+    plt.figure(figsize=(9, 3 * num_rows))
 
     for idx, (lores, superres, hires) \
             in enumerate(zip(lores_batch, sures_batch, hires_batch)):
@@ -203,8 +205,17 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0', results_director
                    interpolation='none')
         plt.axis('off')
 
+        if not is_val:
+            if idx == 1:
+                break
+
     plt.tight_layout()
-    plt.savefig(f"{results_directory}/gan_samples_{epoch:04d}.png")
+
+    if is_val:
+        plt.savefig(f"{results_directory}/gan_samples_{epoch:04d}_val.png")
+    else:
+        plt.savefig(f"{results_directory}/gan_samples_{epoch:04d}_train.png")
+
     plt.close()
 
 def save_loss_plot(loss_g, loss_d, directory, is_val=False):
@@ -275,6 +286,7 @@ def main():
     test_dataloader = DataLoader(test_data, batch_size=2, shuffle =True)
 
     # Init generator model.
+
     if args.model == "SRCNN":
         generator = SRCNN(input_dim=(251,61) , output_dim=output_dim).to(device)
     elif args.model == "EDSR":
@@ -285,6 +297,11 @@ def main():
     # Init discriminator model.
     discriminator = Discriminator(args.is_big_data).to(device)
     # discriminator = PatchGAN().to(device)
+
+    #loss
+    criterion_dictionary = {"MSE":nn.MSELoss(), "L1":nn.L1Loss(), "None": None}
+    criterion = criterion_dictionary[args.criterion_type]
+
 
     # Optimisers
     optim_G = optim.Adam(generator.parameters(), lr=args.lr)
@@ -303,14 +320,14 @@ def main():
     for epoch in range(args.n_epochs):
         loss_G, loss_D, mean_psnr = train_epoch(
             generator, discriminator, optim_G, optim_D, train_dataloader,
-            device)
+            device, criterion)
 
         # Report model performance.
         print(f"Epoch: {epoch}, G: {loss_G}, D: {loss_D}, PSNR: {mean_psnr}")
         #evaluation
         if epoch % args.eval_interval == 0:
             loss_G_val, loss_D_val, mean_psnr_val = eval_epoch(
-                generator, discriminator, test_dataloader, device)
+                generator, discriminator, test_dataloader, device, criterion)
             print(f"Validation on epoch: {epoch}, G: {loss_G_val}, "
                   f"D: {loss_D_val}, PSNR: {mean_psnr_val}")
 
@@ -327,7 +344,8 @@ def main():
             plot_D_val.append(loss_D_val)
         #plotting
         if epoch % args.save_interval == 0:
-            plot_samples(generator, test_dataloader, epoch, device=device, results_directory = results_directory)
+            plot_samples(generator, test_dataloader, epoch, device=device, results_directory = results_directory, is_val=True)
+            plot_samples(generator, train_dataloader, epoch, device=device, results_directory = results_directory, is_val=False)
 
         plot_D.append(loss_D)
         plot_G.append(loss_G)
@@ -342,19 +360,19 @@ def main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--n_epochs', type=int, default=1000,
+    parser.add_argument('--n_epochs', type=int, default=300,
                         help="number of epochs")
     parser.add_argument('--batch_size', type=int, default=8,
                         help="batch size")
     parser.add_argument('--lr', type=float, default=0.002,
                         help="learning rate")
-    parser.add_argument('--latent_dim', type=int, default=128,
+    parser.add_argument('--latent_dim', type=int, default=64,
                         help="dimensionality of the latent space, only "
                         "relevant for EDSR")
-    parser.add_argument('--num_res_blocks', type=int, default=8,
+    parser.add_argument('--num_res_blocks', type=int, default=2,
                         help="Number of resblocks in model, only relevant "
                         "for EDSR")
-    parser.add_argument('--model', type=str, default="EDSR",
+    parser.add_argument('--model', type=str, default="SRCNN",
                         help="Model type. EDSR or SRCNN")
     parser.add_argument('--is_big_data', action='store_true',
                         help="Is big version data")
@@ -362,7 +380,7 @@ if __name__ == "__main__":
                         help="Is fourier data")
     parser.add_argument('--test_percentage', type=float, default=0.1,
                         help="Size of the test set")
-    parser.add_argument('--save_interval', type=int, default=10,
+    parser.add_argument('--save_interval', type=int, default=5,
                         help="Save images every SAVE_INTERVAL epochs")
     parser.add_argument('--eval_interval', type=int, default=2,
                         help="evaluate on test set ever eval_interval epochs")
@@ -372,8 +390,12 @@ if __name__ == "__main__":
                         help="How many epochs of no improvement to consider Plateau")
     parser.add_argument('--is_psnr_step', type=bool, default=False,
                         help="Use PSNR for scheduler or separate losses")
-    parser.add_argument('--experiment_num', type=int, default=1,
-                        help="Id of the experiment running")
+    parser.add_argument('--experiment_num', type=int, default=4,
+                        help="ID of the experiment running")
+    parser.add_argument('--criterion_type', type=str, default="MSE",
+                        help="Criterion to use: MSE or L1 or None")
+    parser.add_argument('--is_gan', type=bool, default="True",
+                        help="Use GAN loss or not")
 
 
 
