@@ -122,7 +122,6 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
     for sample in dataloader:
         lores_batch = sample['x'].to(device).float()
         hires_batch = sample['y'].to(device).float()
-        print(lores_batch.shape)
 
         # Create label tensors.
         ones = torch.ones((len(lores_batch), 1)).to(device).float()
@@ -140,11 +139,30 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
     return mean(mean_loss_G), mean(mean_loss_D), mean(mean_psnr)
 
 
-def plot_samples(generator, dataloader, epoch, device='cuda:0', results_directory="images"):
+def plot_samples(generator, dataset, epoch, device='cuda', directory='image'):
     """
-    Plot a number of low- and high-resolution samples and the superresolution
-    sample obtained from the lr image.
+    Plot data samples, their superresolution and the corresponding fk
+    transforms.
     """
+    def add_subplot(plt, image, i, idx, title=None, cmap='viridis'):
+        plt.subplot(num_rows, num_cols, num_cols * idx + i)
+
+        if idx == 0:
+            plt.title(title)
+
+        plt.imshow(image.squeeze().detach().cpu(),
+                   interpolation='none', cmap=cmap)
+        plt.axis('off')
+
+    def transform_fk(image):
+        image = torch.nn.functional.interpolate(
+            image.unsqueeze(0), size=(251, 121))
+        image_fk = torch.rfft(image, 2, normalized=True)
+        image_fk = image_fk.pow(2).sum(-1).sqrt()
+
+        return image_fk
+
+    dataloader = DataLoader(dataset, shuffle=False, batch_size=2)
     sample = next(iter(dataloader))
 
     lores_batch = sample['x'].to(device).float()
@@ -157,70 +175,22 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0', results_director
     num_cols = 6
     num_rows = dataloader.batch_size
 
-    plt.figure(figsize=(9, 3 * dataloader.batch_size))
+    plt.figure(figsize=(9, 3 * num_rows))
 
-    for idx, (lores, superres, hires) \
+    for idx, (lores, sures, hires) \
             in enumerate(zip(lores_batch, sures_batch, hires_batch)):
-        plt.subplot(num_rows, num_cols, num_cols*idx+1)
+        # Plot images.
+        add_subplot(plt, lores, 1, idx, "LR", cmap='gray')
+        add_subplot(plt, sures, 2, idx, "SR", cmap='gray')
+        add_subplot(plt, hires, 3, idx, "HR", cmap='gray')
 
-        if idx == 0:
-            plt.title("LR")
-
-        plt.imshow(lores.squeeze().detach().cpu(),
-                   interpolation='none', cmap='gray')
-        plt.axis('off')
-
-        plt.subplot(num_rows, num_cols, num_cols*idx+2)
-        if idx == 0:
-            plt.title("Superresolution")
-
-        plt.imshow(superres.squeeze().detach().cpu(),
-                   interpolation='none', cmap='gray')
-        plt.axis('off')
-
-        plt.subplot(num_rows, num_cols, num_cols*idx+3)
-        if idx == 0:
-            plt.title("HR")
-
-        plt.imshow(hires.squeeze().detach().cpu(),
-                   interpolation='none', cmap='gray')
-        plt.axis('off')
-
-        # Transformed
-        plt.subplot(num_rows, num_cols, num_cols*idx+4)
-        if idx == 0:
-            plt.title("LR fk")
-
-        lores = torch.nn.functional.interpolate(
-            lores.unsqueeze(0), size=(251, 121))
-        lores = torch.rfft(lores, 2, normalized=True)
-        lores = lores.pow(2).sum(-1).sqrt()
-        plt.imshow(lores.squeeze().detach().cpu(),
-                   interpolation='none')
-        plt.axis('off')
-
-        plt.subplot(num_rows, num_cols, num_cols*idx+5)
-        if idx == 0:
-            plt.title("Superresolution fk")
-
-        superres = torch.rfft(superres, 2, normalized=True)
-        superres = superres.pow(2).sum(-1).sqrt()
-        plt.imshow(superres.squeeze().detach().cpu(),
-                   interpolation='none')
-        plt.axis('off')
-
-        plt.subplot(num_rows, num_cols, num_cols*idx+6)
-        if idx == 0:
-            plt.title("HR fk")
-
-        hires = torch.rfft(hires, 2, normalized=True)
-        hires = hires.pow(2).sum(-1).sqrt()
-        plt.imshow(hires.squeeze().detach().cpu(),
-                   interpolation='none')
-        plt.axis('off')
+        # Plot transformed images.
+        add_subplot(plt, transform_fk(lores), 4, idx, "LR fk")
+        add_subplot(plt, transform_fk(sures), 5, idx, "SR fk")
+        add_subplot(plt, transform_fk(hires), 6, idx, "HR fk")
 
     plt.tight_layout()
-    plt.savefig(f"{results_directory}/gan_samples_{epoch:04d}.png")
+    plt.savefig(os.path.join(directory, 'samples_{epoch}.png'))
     plt.close()
 
 
@@ -335,7 +305,8 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # Data arguments.
     data_group = parser.add_argument_group('Data')
@@ -385,7 +356,7 @@ if __name__ == "__main__":
     # Misc arguments.
     misc_group = parser.add_argument_group('Miscellaneous')
     misc_group.add_argument(
-        '--eval_interval', type=int, default=2,
+        '--eval_interval', type=int, default=10,
         help="evaluate on test set ever eval_interval epochs")
     misc_group.add_argument(
         '--save_interval', type=int, default=10,
