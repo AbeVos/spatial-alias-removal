@@ -32,13 +32,19 @@ class SRCNN(nn.Module):
 
 
 class Residual_Block(nn.Module):
-    def __init__(self, feature_dim, kernel_size, rescale = 1):
+    def __init__(self, feature_dim, kernel_size, rescale=1):
         super(Residual_Block, self).__init__()
-        self.block = nn.Sequential()
-        self.block.add_module("Convolution 1", nn.Conv2d(feature_dim , feature_dim, kernel_size = kernel_size,  stride=1, padding=1))
-        self.block.add_module("ReLU", nn.ReLU())
-        self.block.add_module("Convolution 2", nn.Conv2d(feature_dim , feature_dim, kernel_size = kernel_size,  stride=1, padding=1))
+
+        self.block = nn.Sequential(
+            nn.Conv2d(feature_dim, feature_dim, kernel_size, stride=1,
+                     padding=1),
+            nn.ReLU(),
+            nn.Conv2d(feature_dim, feature_dim, kernel_size, stride=1,
+                     padding=1)
+        )
+
         self.rescale = rescale
+
     def forward(self, x):
         out = self.block(x)
         out *= self.rescale
@@ -47,7 +53,8 @@ class Residual_Block(nn.Module):
 
 
 class EDSR(nn.Module):
-    def __init__(self, latent_dim= 256, n_resblocks = 32, rescale = 0.1, output_dim  = [251,121]):
+    def __init__(self, latent_dim=256, n_resblocks=32, rescale=0.1,
+                 output_dim=[251, 121]):
         super(EDSR, self).__init__()
         self.output_dim = output_dim
         kernel_size = 3
