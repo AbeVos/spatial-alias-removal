@@ -48,6 +48,7 @@ def train_epoch(G, D, optim_G, optim_D, train_dataloader, device='cuda:0'):
     for sample in train_dataloader:
         lores_batch = sample['x'].to(device).float()
         hires_batch = sample['y'].to(device).float()
+        print(lores_batch.shape, hires_batch.shape)
 
         ones = torch.ones((len(lores_batch), 1)).to(device).float()
         zeros = torch.zeros((len(lores_batch), 1)).to(device).float()
@@ -206,6 +207,7 @@ def plot_samples(generator, dataloader, epoch, device='cuda:0', results_director
     plt.tight_layout()
     plt.savefig(f"{results_directory}/gan_samples_{epoch:04d}.png")
     plt.close()
+
 
 def save_loss_plot(loss_g, loss_d, directory, is_val=False):
     plt.figure()
