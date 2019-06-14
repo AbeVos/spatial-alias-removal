@@ -106,5 +106,7 @@ venv.bak/
 .DS_Store
 
 .idea/
+images/
 Data/
 Data_big/
+*.zip
