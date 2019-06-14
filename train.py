@@ -54,9 +54,12 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
     -------
     tuple of float
         Tuple containing the mean loss values for the generator and
-        discriminator respectively.
+        discriminator, and the mean PSNR respectively.
     """
     def train_update(lores_batch, hires_batch):
+        """
+        Update the model over a single minibatch.
+        """
         # Train the discriminator.
         D.train()
         G.eval()
@@ -90,8 +93,10 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
 
         return loss_D.item(), percept_loss.item(), psnr
 
-
     def eval_update(lores_batch, hires_batch):
+        """
+        Evaluate the model for a single mini-batch.
+        """
         D.eval()
         G.eval()
 
