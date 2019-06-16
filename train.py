@@ -32,7 +32,7 @@ def split_dataset(dataset, test_percentage=0.1):
 
 
 def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
-                batch_size=64, eval=False, reconstruction_criterion=nn.MSELoss(), is_gan=True):
+                batch_size=64, eval=False, reconstruction_criterion=nn.MSELoss(), is_gan=True, is_fk_loss=False):
     """
     Train both generator and discriminator for a single epoch.
     Parameters
@@ -54,6 +54,8 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
         options: nn.MSELoss(), nn.L1Loss(), None (if used, only GAN loss is counted)
     is_gan: bool
         If 'True', GAN loss is used, else just reconstruction loss
+    is_fk_loss: bool
+        If 'True', loss is evaluated in the fk space, else loss is evaluated directly
 
 
     Returns
@@ -71,6 +73,8 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
         G.eval()
 
         sures_batch = G(lores_batch)
+        if is_fk_loss:
+            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
         disc_sures = D(sures_batch.detach())
         disc_hires = D(hires_batch)
 
@@ -85,6 +89,8 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
         G.train()
 
         sures_batch = G(lores_batch)
+        if is_fk_loss:
+            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
         disc_sures = D(sures_batch)
         if content_criterion == None:
             content_loss = 0
@@ -109,6 +115,8 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
         G.train()
 
         sures_batch = G(lores_batch)
+        if is_fk_loss:
+            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
 
         if content_criterion == None:
             raise Exception("Cannot use None reconstruction loss without GAN")
@@ -126,10 +134,13 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
         """
         Evaluate the model for a single mini-batch.
         """
+
         D.eval()
         G.eval()
 
         sures_batch = G(lores_batch)
+        if is_fk_loss:
+            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
         disc_sures = D(sures_batch)
         disc_hires = D(hires_batch)
 
@@ -153,7 +164,8 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
         G.eval()
 
         sures_batch = G(lores_batch)
-
+        if is_fk_loss:
+            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
         if content_criterion == None:
             raise Exception("Cannot use None reconstruction loss without GAN")
         else:
@@ -163,6 +175,7 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
 
         return 0, loss.item(), psnr
 
+    output_dim = dataset[0]['y'].shape[1:]
     dataloader = DataLoader(
         dataset, batch_size=batch_size, drop_last=(not eval), shuffle=True)
 
@@ -176,7 +189,8 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
     for sample in dataloader:
         lores_batch = sample['x'].to(device).float()
         hires_batch = sample['y'].to(device).float()
-
+        if is_fk_loss:
+            hires_batch = transform_fk(hires_batch, output_dim, is_batch=True)
         # Create label tensors.
         ones = torch.ones((len(lores_batch), 1)).to(device).float()
         zeros = torch.zeros((len(lores_batch), 1)).to(device).float()
@@ -198,6 +212,15 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
 
     return mean(mean_loss_G), mean(mean_loss_D), mean(mean_psnr)
 
+def transform_fk(image, dataset_dim, is_batch = False):
+    if not is_batch:
+        image =  image.unsqueeze(0)
+    image = torch.nn.functional.interpolate(
+        image, size=dataset_dim)
+    image_fk = torch.rfft(image, 2, normalized=True)
+    image_fk = image_fk.pow(2).sum(-1).sqrt()
+
+    return image_fk
 
 def plot_samples(generator, dataset, epoch, device='cuda', directory='image', is_train=False):
     """
@@ -214,13 +237,6 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image', is
                    interpolation='none', cmap=cmap)
         plt.axis('off')
 
-    def transform_fk(image):
-        image = torch.nn.functional.interpolate(
-            image.unsqueeze(0), size=(251, 121))
-        image_fk = torch.rfft(image, 2, normalized=True)
-        image_fk = image_fk.pow(2).sum(-1).sqrt()
-
-        return image_fk
 
     dataloader = DataLoader(dataset, shuffle=False, batch_size=2)
     sample = next(iter(dataloader))
@@ -234,6 +250,8 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image', is
 
     num_cols = 6
     num_rows = dataloader.batch_size
+    output_dim = dataset[0]['y'].shape[1:]
+    print(output_dim)
 
     plt.figure(figsize=(9, 3 * num_rows))
 
@@ -245,9 +263,9 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image', is
         add_subplot(plt, hires, 3, idx, "HR", cmap='gray')
 
         # Plot transformed images.
-        add_subplot(plt, transform_fk(lores), 4, idx, "LR fk")
-        add_subplot(plt, transform_fk(sures), 5, idx, "SR fk")
-        add_subplot(plt, transform_fk(hires), 6, idx, "HR fk")
+        add_subplot(plt, transform_fk(lores, output_dim), 4, idx, "LR fk")
+        add_subplot(plt, transform_fk(sures, output_dim), 5, idx, "SR fk")
+        add_subplot(plt, transform_fk(hires, output_dim), 6, idx, "HR fk")
 
     plt.tight_layout()
     if not is_train:
@@ -332,7 +350,8 @@ def main(args):
         # Train model for one epoch.
         loss_G, loss_D, mean_psnr = iter_epoch(
             generator, discriminator, optim_G, optim_D, train_data, device,
-            batch_size=args.batch_size, reconstruction_criterion=reconstruction_criterion, is_gan=args.is_gan)
+            batch_size=args.batch_size, reconstruction_criterion=reconstruction_criterion,
+            is_gan=args.is_gan, is_fk_loss=args.is_fk_loss)
 
         # Report model performance.
         print(f"Epoch: {epoch}, G: {loss_G}, D: {loss_D}, PSNR: {mean_psnr}")
@@ -343,7 +362,8 @@ def main(args):
         if epoch % args.eval_interval == 0:
             loss_G_val, loss_D_val, mean_psnr_val = iter_epoch(
                 generator, discriminator, None, None, test_data, device,
-                batch_size=args.batch_size, eval=True, reconstruction_criterion=reconstruction_criterion, is_gan=args.is_gan)
+                batch_size=args.batch_size, eval=True, reconstruction_criterion=reconstruction_criterion,
+                is_gan=args.is_gan, is_fk_loss=args.is_fk_loss)
             print(f"Validation on epoch: {epoch}, G: {loss_G_val}, "
                   f"D: {loss_D_val}, PSNR: {mean_psnr_val}")
 
@@ -429,6 +449,9 @@ if __name__ == "__main__":
     training_group.add_argument(
         '--is_gan', type=int, default="0",
         help="Use GAN loss or not, 0 for False and 1 for True")
+    training_group.add_argument(
+        '--is_fk_loss', type=int, default="1",
+        help="Use loss in fk space or not, 0 for False and 1 for True")
 
     # Misc arguments.
     misc_group = parser.add_argument_group('Miscellaneous')
@@ -442,7 +465,7 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type=int, default=9,
+        '--experiment_num', type=int, default=10,
         help="Id of the experiment running")
 
     args = parser.parse_args()
