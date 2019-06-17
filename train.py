@@ -64,8 +64,8 @@ def iter_epoch(
 
     Returns
     -------
-    tuple of float
-        Tuple containing the mean loss values for the generator and
+    dict
+        Dictionary containing the mean loss values for the generator and
         discriminator, and the mean PSNR respectively.
     """
     def train_update_gan(lores_batch, hires_batch):
