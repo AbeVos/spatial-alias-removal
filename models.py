@@ -138,7 +138,7 @@ class EDSR(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, stride=3, input_dim=(251, 301)):
+    def __init__(self, stride=2, input_dim=(251, 301)):
         """
         DCGAN discriminator modified to fit the data.
         """
