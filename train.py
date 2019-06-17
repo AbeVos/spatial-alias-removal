@@ -58,7 +58,6 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
     is_fk_loss: bool
         If 'True', loss is evaluated in the fk space, else loss is evaluated directly
 
-
     Returns
     -------
     tuple of float
@@ -74,8 +73,10 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
         G.eval()
 
         sures_batch = G(lores_batch)
+
         if is_fk_loss:
             sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
+
         disc_sures = D(sures_batch.detach())
         disc_hires = D(hires_batch)
 
@@ -90,9 +91,12 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
         G.train()
 
         sures_batch = G(lores_batch)
+
         if is_fk_loss:
             sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
+
         disc_sures = D(sures_batch)
+
         if content_criterion == None:
             content_loss = 0
         else:
@@ -186,7 +190,7 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
     mean_psnr = []
 
     content_criterion = reconstruction_criterion
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()
 
     for sample in dataloader:
         lores_batch = sample['x'].to(device).float()
@@ -277,9 +281,9 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
 
     plt.tight_layout()
     if not is_train:
-        plt.savefig(os.path.join(directory, f'samples_{epoch}.png'))
+        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}.png'))
     else:
-        plt.savefig(os.path.join(directory, f'samples_{epoch}_train.png'))
+        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}_train.png'))
     plt.close()
 
 
@@ -311,8 +315,9 @@ def main(args):
     # Select the device to train the model on.
     device = torch.device(args.device)
 
-    # Load the dataset. #TODO : Add normalisation  transforms.Normalize(torch.tensor(-4.4713e-07).float(),
-    #             #                      torch.tensor(0.1018).float())
+    # Load the dataset.
+    #TODO : Add normalisation  transforms.Normalize(torch.tensor(-4.4713e-07).float(),
+    # torch.tensor(0.1018).float())
     dataset = Data(
         args.filename_x, args.filename_y, args.data_root,
         transforms=transforms.Compose([
@@ -320,11 +325,15 @@ def main(args):
         ])
     )
 
+    print(f"Data sizes, input: {dataset.input_dim}, output: "
+          f"{dataset.output_dim}")
+
     train_data, test_data = split_dataset(dataset, args.test_percentage)
 
     # Initialize generator model.
     if args.model == 'SRCNN':
-        generator = SRCNN(dataset.input_dim, dataset.output_dim).to(device)
+        generator = SRCNN(input_dim=dataset.input_dim,
+                          output_dim=dataset.output_dim).to(device)
     elif args.model == 'EDSR':
         generator = EDSR(
             args.latent_dim, args.num_res_blocks,
@@ -332,7 +341,7 @@ def main(args):
 
     # Initialize the discriminator model.
     # TODO: fix hardcoded size of discriminator.
-    discriminator = Discriminator().to(device)
+    discriminator = Discriminator(input_dim=dataset.output_dim).to(device)
 
     # Optimizers
     optim_G = optim.Adam(generator.parameters(), lr=args.lr)
@@ -465,7 +474,7 @@ if __name__ == "__main__":
         '--is_gan', action='store_true',
         help="If set, use GAN loss.")
     training_group.add_argument(
-        '--is_fk_loss', action='store_false',
+        '--is_fk_loss', action='store_true',
         help="If set, use loss in fk space.")
 
     # Misc arguments.
