@@ -33,9 +33,9 @@ def split_dataset(dataset, test_percentage=0.1):
 
 
 def iter_epoch(
-        G, D, optim_G, optim_D, dataset, device='cuda:0', batch_size=64,
+        models, optimizers, dataset, device='cuda:0', batch_size=64,
         eval=False, reconstruction_criterion=nn.MSELoss(),
-        is_gan=True, is_fk_loss=False):
+        use_gan=True, is_fk_loss=False):
     """
     Train both generator and discriminator for a single epoch.
     Parameters
@@ -68,122 +68,70 @@ def iter_epoch(
         Dictionary containing the mean loss values for the generator and
         discriminator, and the mean PSNR respectively.
     """
-    def train_update_gan(lores_batch, hires_batch):
-        """
-        Update the model over a single minibatch.
-        """
-        # Train the discriminator.
-        D.train()
+    def update_discriminator(discriminator, lores_batch, hires_batch,
+                             transform=identity):
+        """Update the discriminator over a single minibatch."""
+        if eval:
+            D.eval()
+        else:
+            D.train()
         G.eval()
 
-        sures_batch = G(lores_batch)
+        hires_batch = transform(hires_batch, dataset_dim=output_dim, is_batch=True)
 
-        if is_fk_loss:
-            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
+        # Generate superresolution and transform.
+        sures_batch = G(lores_batch)
+        sures_batch = transform(sures_batch, dataset_dim=output_dim, is_batch=True)
 
         disc_sures = D(sures_batch.detach())
         disc_hires = D(hires_batch)
 
         loss_D = criterion(disc_hires, ones) + criterion(disc_sures, zeros)
 
-        loss_D.backward()
-        optim_D.step()
-        optim_D.zero_grad()
+        if not eval:
+            loss_D.backward()
+            optim_D.step()
+            optim_D.zero_grad()
 
-        # Train the generator.
+        return loss_D.item()
+
+    def update_generator(lores_batch, hires_batch, use_gan=True,
+                         transform=identity):
+        """Update the generator over a single minibatch."""
         D.eval()
-        G.train()
+        if eval:
+            G.eval()
+        else:
+            G.train()
 
+        hires_batch = transform(hires_batch, dataset_dim=output_dim, is_batch=True)
+
+        # Generate superresolution and transform.
         sures_batch = G(lores_batch)
-
-        if is_fk_loss:
-            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
+        sures_batch = transform(sures_batch, dataset_dim=output_dim, is_batch=True)
 
         disc_sures = D(sures_batch)
 
-        if content_criterion is None:
-            content_loss = 0
-        else:
-            content_loss = content_criterion(sures_batch, hires_batch)
-        loss_G = criterion(disc_sures, ones)
-        percept_loss = content_loss + loss_G
-
-        percept_loss.backward()
-        optim_G.step()
-        optim_G.zero_grad()
-
-        psnr = 10 * log10(1 / nn.MSELoss()(sures_batch, hires_batch).item())
-
-        return loss_D.item(), percept_loss.item(), psnr
-
-    def train_update_mse(lores_batch, hires_batch):
-        """
-        Update the model over a single minibatch.
-        """
-        # Train the discriminator.
-        G.train()
-
-        sures_batch = G(lores_batch)
-        if is_fk_loss:
-            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
-
-        if content_criterion is None:
+        if not use_gan and content_criterion is None:
             raise Exception("Cannot use None reconstruction loss without GAN")
-        else:
-            loss = content_criterion(sures_batch, hires_batch)
 
-        loss.backward()
-        optim_G.step()
-        optim_G.zero_grad()
+        gen_loss = criterion(disc_sures, ones) if use_gan else 0
+        rec_loss = content_criterion(sures_batch, hires_batch) \
+                if content_criterion is not None else 0
 
-        psnr = 10 * log10(1 / nn.MSELoss()(sures_batch, hires_batch).item())
+        loss_G = gen_loss + rec_loss
 
-        return 0, loss.item(), psnr
+        if not eval:
+            loss_G.backward()
+            optim_G.step()
+            optim_G.zero_grad()
 
-    def eval_update_gan(lores_batch, hires_batch):
-        """
-        Evaluate the model for a single mini-batch.
-        """
+        psnr = 10 * log10(1 / nn.functional.mse_loss(sures_batch, hires_batch).item())
 
-        D.eval()
-        G.eval()
+        return loss_G.item(), psnr
 
-        sures_batch = G(lores_batch)
-        if is_fk_loss:
-            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
-        disc_sures = D(sures_batch)
-        disc_hires = D(hires_batch)
-
-        loss_D = criterion(disc_hires, ones) + criterion(disc_sures, zeros)
-        loss_G = criterion(disc_sures, ones)
-
-        if content_criterion is None:
-            content_loss = 0
-        else:
-            content_loss = content_criterion(sures_batch, hires_batch)
-        percept_loss = content_loss + loss_G
-
-        psnr = 10 * log10(1 / nn.MSELoss()(sures_batch, hires_batch).item())
-
-        return loss_D.item(), percept_loss.item(), psnr
-
-    def eval_update_mse(lores_batch, hires_batch):
-        """
-        Evaluate the model for a single mini-batch.
-        """
-        G.eval()
-
-        sures_batch = G(lores_batch)
-        if is_fk_loss:
-            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
-        if content_criterion is None:
-            raise Exception("Cannot use None reconstruction loss without GAN")
-        else:
-            loss = content_criterion(sures_batch, hires_batch)
-
-        psnr = 10 * log10(1 / nn.MSELoss()(sures_batch, hires_batch).item())
-
-        return 0, loss.item(), psnr
+    G, D, D_fk = models
+    optim_G, optim_D, optim_D_fk = optimizers
 
     output_dim = dataset[0]['y'].shape[1:]
     dataloader = DataLoader(
@@ -191,6 +139,7 @@ def iter_epoch(
 
     mean_loss_G = []
     mean_loss_D = []
+    mean_loss_D_fk = []
     mean_psnr = []
 
     content_criterion = reconstruction_criterion
@@ -201,20 +150,21 @@ def iter_epoch(
         hires_batch = sample['y'].to(device).float()
 
         if is_fk_loss:
-            hires_batch = transform_fk(hires_batch, output_dim, is_batch=True)
+            transform = transform_fk
+        else:
+            transform = identity
 
         # Create label tensors.
         ones = torch.ones((len(lores_batch), 1)).to(device).float()
         zeros = torch.zeros((len(lores_batch), 1)).to(device).float()
 
-        # Select what train update to use.
-        train_update = train_update_gan if is_gan else train_update_mse
-        eval_update = eval_update_gan if is_gan else eval_update_mse
-
-        if not eval:
-            loss_D, loss_G, psnr = train_update(lores_batch, hires_batch)
+        if use_gan:
+            loss_D = update_discriminator(lores_batch, hires_batch, transform)
         else:
-            loss_D, loss_G, psnr = eval_update(lores_batch, hires_batch)
+            loss_D = 0
+
+        loss_G, psnr = update_generator(
+            lores_batch, hires_batch, use_gan, transform)
 
         mean_loss_G.append(loss_G)
         mean_loss_D.append(loss_D)
@@ -223,6 +173,7 @@ def iter_epoch(
     return {
         'G': mean(mean_loss_G),
         'D': mean(mean_loss_D),
+        'D_fk': mean(mean_loss_D_fk) if len(mean_loss_D_fk) > 0 else 0,
         'psnr': mean(mean_psnr)
     }
 
@@ -240,6 +191,13 @@ def transform_fk(image, dataset_dim, is_batch=False):
     image_fk = image_fk.pow(2).sum(-1).sqrt()
 
     return image_fk
+
+
+def identity(input, **kwargs):
+    """
+    Return the input, disregarding any other argument.
+    """
+    return input
 
 
 def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
@@ -299,10 +257,12 @@ def save_loss_plot(loss_g, loss_d, directory, is_val=False):
     plt.plot(loss_d, label="Discriminator loss")
     plt.plot(loss_g, label="Generator loss")
     plt.legend()
+
     if is_val:
         plt.savefig(f"{directory}/gan_loss_val.png")
     else:
         plt.savefig(f"{directory}/gan_loss.png")
+
     plt.close()
 
 
@@ -334,7 +294,7 @@ def main(args):
     )
 
     print(f"Data sizes, input: {dataset.input_dim}, output: "
-          f"{dataset.output_dim}")
+          f"{dataset.output_dim}, Fk: {dataset.output_dim_fk}")
 
     train_data, test_data = split_dataset(dataset, args.test_percentage)
 
@@ -348,22 +308,32 @@ def main(args):
             output_dim=dataset.output_dim).to(device)
 
     # Initialize the discriminator model.
-    # TODO: fix hardcoded size of discriminator.
-    discriminator = Discriminator(input_dim=dataset.output_dim).to(device)
-    discriminator_fk = Discriminator(
-        input_dim=dataset.output_dim_fk).to(device)
+    if args.is_fk_loss:
+        discriminator = Discriminator(
+            input_dim=dataset.output_dim_fk).to(device)
+    else:
+        discriminator = Discriminator(input_dim=dataset.output_dim).to(device)
 
     # Optimizers
     optim_G = optim.Adam(generator.parameters(), lr=args.lr)
     optim_D = optim.Adam(discriminator.parameters(), lr=args.lr)
-    optim_D_fk = optim.Adam(discriminator_fk.parameters(), lr=args.lr)
 
     scheduler_g = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer=optim_G, patience=args.scheduler_patience, verbose=True)
     scheduler_d = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer=optim_D, patience=args.scheduler_patience, verbose=True)
-    scheduler_d_fk = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer=optim_D_fk, patience=args.scheduler_patience, verbose=True)
+
+    # Initialize optional Fk discriminator and optimizer.
+    if args.fk_gan_loss:
+        discriminator_fk = Discriminator(
+            input_dim=dataset.output_dim_fk).to(device)
+        optim_D_fk = optim.Adam(discriminator_fk.parameters(), lr=args.lr)
+        scheduler_d_fk = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer=optim_D_fk, patience=args.scheduler_patience,
+            verbose=True)
+    else:
+        discriminator_fk = None
+        optim_D_fk = None
 
     # losses type
     criterion_dictionary = {
@@ -373,42 +343,37 @@ def main(args):
     }
     reconstruction_criterion = criterion_dictionary[args.criterion_type]
 
-    # Initialize empty lists for plotting.
-    plot_G = []
-    plot_D = []
-    plot_D_fk = []
-    plot_G_val = []
-    plot_D_val = []
-    plot_D_fk_val = []
-
+    # Initialize a dict of empty lists for plotting.
     plot_log = defaultdict(list)
 
     for epoch in range(args.n_epochs):
         # Train model for one epoch.
         loss = iter_epoch(
-            generator, discriminator, optim_G, optim_D, train_data, device,
+            (generator, discriminator, discriminator_fk),
+            (optim_G, optim_D, optim_D_fk), train_data, device,
             batch_size=args.batch_size,
             reconstruction_criterion=reconstruction_criterion,
-            is_gan=args.is_gan, is_fk_loss=args.is_fk_loss)
+            use_gan=args.is_gan, is_fk_loss=args.is_fk_loss)
 
         # Report model performance.
         print(f"Epoch: {epoch}, G: {loss['G']}, D: {loss['D']}, "
               f"PSNR: {loss['psnr']}")
-        plot_log['D'].append(loss['D'])
         plot_log['G'].append(loss['G'])
+        plot_log['D'].append(loss['D'])
 
         # Model evaluation.
         if epoch % args.eval_interval == 0:
             loss_val = iter_epoch(
-                generator, discriminator, None, None, test_data, device,
+                (generator, discriminator, discriminator_fk),
+                (None, None, None), test_data, device,
                 batch_size=args.batch_size, eval=True,
                 reconstruction_criterion=reconstruction_criterion,
-                is_gan=args.is_gan, is_fk_loss=args.is_fk_loss)
+                use_gan=args.is_gan, is_fk_loss=args.is_fk_loss)
             print(f"Validation on epoch: {epoch}, G: {loss_val['G']}, "
                   f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}")
 
-            plot_log['D_val'].append(loss_val['D'])
             plot_log['G_val'].append(loss_val['G'])
+            plot_log['D_val'].append(loss_val['D'])
 
             # Update scheduler based on PSNR or separate model losses.
             if args.is_psnr_step:
@@ -418,6 +383,9 @@ def main(args):
                 scheduler_g.step(loss_val['G'])
                 scheduler_d.step(loss_val['D'])
 
+            save_loss_plot(plot_log['G_val'], plot_log['D_val'],
+                           results_directory, is_val=True)
+
         # Plot results.
         if epoch % args.save_interval == 0:
             plot_samples(generator, test_data, epoch, device,
@@ -426,11 +394,6 @@ def main(args):
                          results_directory, is_train=True)
 
         save_loss_plot(plot_log['G'], plot_log['D'], results_directory)
-
-    # Save final loss plots.
-    save_loss_plot(plot_log['G'], plot_log['D'], results_directory)
-    save_loss_plot(plot_log['G_val'], plot_log['D_val'], results_directory,
-                   is_val=True)
 
     # Save the trained generator model.
     torch.save(generator, os.path.join(results_directory, 'generator.pth'))
@@ -499,10 +462,11 @@ if __name__ == "__main__":
         help="If set, use GAN loss.")
     training_group.add_argument(
         '--is_fk_loss', action='store_true',
-        help="If set, use loss in fk space.")
+        help="If set, use loss in Fk space.")
     training_group.add_argument(
-        '--add_fk_loss', action='store_true',
-        help="If set, combine losses in image and Fk space.")
+        '--fk_gan_loss', action='store_true',
+        help="If set (in combination with `is_fk_loss`) use GAN loss for "
+        "Fk domain.")
 
     # Misc arguments.
     misc_group = parser.add_argument_group('Miscellaneous')
