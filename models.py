@@ -197,4 +197,3 @@ if __name__ == "__main__":
     model = Discriminator()
 
     y = model(data)
-    print(y.shape)

@@ -32,7 +32,8 @@ def split_dataset(dataset, test_percentage=0.1):
 
 
 def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
-                batch_size=64, eval=False, reconstruction_criterion=nn.MSELoss(), is_gan=True, is_fk_loss=False):
+                batch_size=64, eval=False, reconstruction_criterion=nn.MSELoss(),
+               is_gan=True, is_fk_loss=False):
     """
     Train both generator and discriminator for a single epoch.
     Parameters
@@ -107,7 +108,7 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
 
         return loss_D.item(), percept_loss.item(), psnr
 
-    def train_update(lores_batch, hires_batch):
+    def train_update_mse(lores_batch, hires_batch):
         """
         Update the model over a single minibatch.
         """
@@ -130,6 +131,7 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
         psnr = 10 * log10(1 / nn.MSELoss()(sures_batch, hires_batch).item())
 
         return 0, loss.item(), psnr
+
     def eval_update_gan(lores_batch, hires_batch):
         """
         Evaluate the model for a single mini-batch.
@@ -157,7 +159,7 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
 
         return loss_D.item(), percept_loss.item(), psnr
 
-    def eval_update(lores_batch, hires_batch):
+    def eval_update_mse(lores_batch, hires_batch):
         """
         Evaluate the model for a single mini-batch.
         """
@@ -189,22 +191,22 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
     for sample in dataloader:
         lores_batch = sample['x'].to(device).float()
         hires_batch = sample['y'].to(device).float()
+
         if is_fk_loss:
             hires_batch = transform_fk(hires_batch, output_dim, is_batch=True)
+
         # Create label tensors.
         ones = torch.ones((len(lores_batch), 1)).to(device).float()
         zeros = torch.zeros((len(lores_batch), 1)).to(device).float()
 
-        if is_gan:
-            if not eval:
-                loss_D, loss_G, psnr = train_update_gan(lores_batch, hires_batch)
-            else:
-                loss_D, loss_G, psnr = eval_update_gan(lores_batch, hires_batch)
+        # Select what train update to use.
+        train_update = train_update_gan if is_gan else train_update_mse
+        eval_update = eval_update_gan if is_gan else eval_update_mse
+
+        if not eval:
+            loss_D, loss_G, psnr = train_update(lores_batch, hires_batch)
         else:
-            if not eval:
-                loss_D, loss_G, psnr = train_update(lores_batch, hires_batch)
-            else:
-                loss_D, loss_G, psnr = eval_update(lores_batch, hires_batch)
+            loss_D, loss_G, psnr = eval_update(lores_batch, hires_batch)
 
         mean_loss_G.append(loss_G)
         mean_loss_D.append(loss_D)
@@ -212,17 +214,24 @@ def iter_epoch(G, D, optim_G, optim_D, dataset, device='cuda:0',
 
     return mean(mean_loss_G), mean(mean_loss_D), mean(mean_psnr)
 
-def transform_fk(image, dataset_dim, is_batch = False):
+
+def transform_fk(image, dataset_dim, is_batch=False):
+    """
+    Apply the Fourier transform of an image (or batch of images) and
+    compute the magnitude of its real and imaginary parts.
+    """
     if not is_batch:
         image =  image.unsqueeze(0)
-    image = torch.nn.functional.interpolate(
-        image, size=dataset_dim)
+
+    image = torch.nn.functional.interpolate(image, size=dataset_dim)
     image_fk = torch.rfft(image, 2, normalized=True)
     image_fk = image_fk.pow(2).sum(-1).sqrt()
 
     return image_fk
 
-def plot_samples(generator, dataset, epoch, device='cuda', directory='image', is_train=False):
+
+def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
+                 is_train=False):
     """
     Plot data samples, their superresolution and the corresponding fk
     transforms.
@@ -251,7 +260,6 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image', is
     num_cols = 6
     num_rows = dataloader.batch_size
     output_dim = dataset[0]['y'].shape[1:]
-    print(output_dim)
 
     plt.figure(figsize=(9, 3 * num_rows))
 
@@ -401,24 +409,29 @@ if __name__ == "__main__":
 
     # Data arguments.
     data_group = parser.add_argument_group('Data')
+
     data_group.add_argument(
         '--data_root', type=str, default='Data/',
         help="Root directory of the data.")
     data_group.add_argument(
-        '--filename_x', type=str, default='data_25',
-        help="Name of the data input file (without the '.mat' extension).")
+        '--filename_x', '-x', type=str, default='data_25',
+        help="Name of the low resolution data file (without the '.mat' "
+        "extension).")
     data_group.add_argument(
-        '--filename_y', type=str, default='data_125',
-        help="Name of the data output file (without the '.mat' extension).")
+        '--filename_y', '-y', type=str, default='data_125',
+        help="Name of the high resolution data filee (without the '.mat' "
+        "extension).")
     data_group.add_argument(
         '--test_percentage', type=float, default=0.1,
         help="Size of the test set")
 
     # Model arguments.
     model_group = parser.add_argument_group('Model')
+
     model_group.add_argument(
         '--model', type=str, default="EDSR",
-        help="Model type. EDSR or SRCNN")
+        choices=['EDSR', 'SRCNN'],
+        help="Model type.")
     model_group.add_argument(
         '--latent_dim', type=int, default=128,
         help="dimensionality of the latent space, only relevant for EDSR")
@@ -428,6 +441,7 @@ if __name__ == "__main__":
 
     # Training arguments.
     training_group = parser.add_argument_group('Training')
+
     training_group.add_argument(
         '--n_epochs', type=int, default=100,
         help="number of epochs")
@@ -445,19 +459,21 @@ if __name__ == "__main__":
         help="Use PSNR for scheduler or separate losses")
     training_group.add_argument(
         '--criterion_type', type=str, default="L1",
-        help="Criterion to use: MSE or L1 or None")
+        choices=['MSE', 'L1', 'None'],
+        help="Reconstruction criterion to use.")
     training_group.add_argument(
-        '--is_gan', type=int, default="0",
-        help="Use GAN loss or not, 0 for False and 1 for True")
+        '--is_gan', action='store_true',
+        help="If set, use GAN loss.")
     training_group.add_argument(
-        '--is_fk_loss', type=int, default="1",
-        help="Use loss in fk space or not, 0 for False and 1 for True")
+        '--is_fk_loss', action='store_false',
+        help="If set, use loss in fk space.")
 
     # Misc arguments.
     misc_group = parser.add_argument_group('Miscellaneous')
+
     misc_group.add_argument(
         '--eval_interval', type=int, default=10,
-        help="evaluate on test set ever eval_interval epochs")
+        help="evaluate on test set every eval_interval epochs")
     misc_group.add_argument(
         '--save_interval', type=int, default=10,
         help="Save images every SAVE_INTERVAL epochs")
