@@ -29,6 +29,35 @@ class SRCNN(nn.Module):
         return torch.tanh(self.sequence(x_upscaled) + x_upscaled)
 
 
+
+
+class VDSR(nn.Module):
+    def __init__(self, latent_dim= 256, n_blocks = 5, output_dim  = [251,121]):
+        super(VDSR, self).__init__()
+        self.output_dim = output_dim
+        kernel_size = 3
+
+        #blocks
+        self.blocks = nn.Sequential()
+
+        for block in range(n_blocks):
+            if block ==0:
+                self.blocks.add_module("Conv {}".format(block), nn.Conv2d(1, latent_dim, kernel_size, stride = 1, padding =1))
+            else:
+                self.blocks.add_module("Conv {}".format(block), nn.Conv2d(latent_dim, latent_dim, kernel_size, stride = 1, padding =1))
+            self.blocks.add_module("ReLU {}".format(block), nn.ReLU())
+        #last convolution
+        self.conv_last = nn.Conv2d(latent_dim, 1, kernel_size = kernel_size, stride = 1 ,padding = 1)
+
+
+    def forward(self, x):
+        x = nn.functional.interpolate(x, size=self.output_dim)
+        out = self.blocks(x)
+        out = self.conv_last(out)
+        out += x
+
+        return out
+
 class Residual_Block(nn.Module):
     def __init__(self, feature_dim, kernel_size, rescale=1):
         super(Residual_Block, self).__init__()
