@@ -21,9 +21,7 @@ class SRCNN(nn.Module):
             nn.BatchNorm2d(latent_dim[1]),
 
             nn.Conv2d(latent_dim[1], 1, 5, padding=2),
-            # nn.Tanh(),
         )
-
 
     def forward(self, x):
         x_upscaled = nn.functional.interpolate(x, size=self.output_dim)
@@ -140,7 +138,6 @@ class Discriminator(nn.Module):
                 nn.BatchNorm1d(2048),
 
                 nn.Linear(2048, 1),
-                nn.Sigmoid()
             )
         else:
             self.fc = nn.Sequential(
@@ -149,7 +146,6 @@ class Discriminator(nn.Module):
                 nn.BatchNorm1d(2048),
 
                 nn.Linear(2048, 1),
-                nn.Sigmoid()
             )
 
     def forward(self, x):
@@ -170,7 +166,11 @@ class PatchGAN(nn.Module):
         super(PatchGAN, self).__init__()
 
         self.conv = nn.Sequential(
-            nn.Conv2d(1, 64, 4, stride=2),
+            nn.Conv2d(1, 32, 4, stride=2),
+            nn.LeakyReLU(0.2),
+            nn.BatchNorm2d(32),
+
+            nn.Conv2d(32, 64, 4, stride=2),
             nn.LeakyReLU(0.2),
             nn.BatchNorm2d(64),
 
@@ -178,23 +178,17 @@ class PatchGAN(nn.Module):
             nn.LeakyReLU(0.2),
             nn.BatchNorm2d(128),
 
-            nn.Conv2d(128, 256, 4, stride=2),
+            nn.Conv2d(128, 256, 4),
             nn.LeakyReLU(0.2),
             nn.BatchNorm2d(256),
 
-            nn.Conv2d(256, 512, 15),
-            nn.LeakyReLU(0.2),
-            nn.BatchNorm2d(512),
-
-            nn.Conv2d(512, 1, 14),
-            nn.Sigmoid()
+            nn.Conv2d(256, 1, 5),
         )
-
-        self.loss = nn.MSELoss()
 
     def forward(self, x):
         x = self.conv(x)
 
+        # Average over all patch predictions.
         return x.view(len(x), -1).mean(-1).unsqueeze(-1)
 
 
