@@ -35,7 +35,7 @@ def split_dataset(dataset, test_percentage=0.1):
 def iter_epoch(
         models, optimizers, dataset, device='cuda:0', batch_size=64,
         eval=False, reconstruction_criterion=nn.MSELoss(),
-        use_gan=True, is_fk_loss=False):
+        use_gan=True, use_fk_loss=False):
     """
     Train both generator and discriminator for a single epoch.
     Parameters
@@ -68,8 +68,8 @@ def iter_epoch(
         Dictionary containing the mean loss values for the generator and
         discriminator, and the mean PSNR respectively.
     """
-    def update_discriminator(discriminator, lores_batch, hires_batch,
-                             transform=identity):
+    def update_discriminator(D, lores_batch, hires_batch,
+                             use_fk_loss=False):
         """Update the discriminator over a single minibatch."""
         if eval:
             D.eval()
@@ -77,11 +77,14 @@ def iter_epoch(
             D.train()
         G.eval()
 
-        hires_batch = transform(hires_batch, dataset_dim=output_dim, is_batch=True)
+        if use_fk_loss:
+            hires_batch = transform_fk(hires_batch, output_dim, True)
 
         # Generate superresolution and transform.
         sures_batch = G(lores_batch)
-        sures_batch = transform(sures_batch, dataset_dim=output_dim, is_batch=True)
+
+        if use_fk_loss:
+            sures_batch = transform_fk(sures_batch, output_dim, is_batch=True)
 
         disc_sures = D(sures_batch.detach())
         disc_hires = D(hires_batch)
@@ -95,31 +98,49 @@ def iter_epoch(
 
         return loss_D.item()
 
-    def update_generator(lores_batch, hires_batch, use_gan=True,
-                         transform=identity):
+    def update_generator(lores_batch, hires_batch, use_gan):
         """Update the generator over a single minibatch."""
         D.eval()
+        if D_fk is not None:
+            D_fk.eval()
+
         if eval:
             G.eval()
         else:
             G.train()
 
-        hires_batch = transform(hires_batch, dataset_dim=output_dim, is_batch=True)
-
         # Generate superresolution and transform.
         sures_batch = G(lores_batch)
-        sures_batch = transform(sures_batch, dataset_dim=output_dim, is_batch=True)
 
-        disc_sures = D(sures_batch)
+        if use_fk_loss:
+            hires_fk_batch = transform_fk(
+                hires_batch, output_dim, is_batch=True)
+            sures_fk_batch = transform_fk(
+                sures_batch, output_dim, is_batch=True)
 
-        if not use_gan and content_criterion is None:
+        # Initialize losses.
+        gen_loss = 0
+        gen_fk_loss = 0
+        rec_loss = 0
+        rec_fk_loss = 0
+
+        if use_gan:
+            disc_sures = D(sures_batch)
+            gen_loss = criterion(disc_sures, ones)
+
+            if use_fk_loss:
+                disc_fk_sures = D_fk(sures_fk_batch)
+                gen_fk_loss = criterion(disc_fk_sures, ones)
+        elif content_criterion is None:
             raise Exception("Cannot use None reconstruction loss without GAN")
 
-        gen_loss = criterion(disc_sures, ones) if use_gan else 0
-        rec_loss = content_criterion(sures_batch, hires_batch) \
-                if content_criterion is not None else 0
+        if content_criterion is not None:
+            rec_loss = content_criterion(sures_batch, hires_batch)
 
-        loss_G = gen_loss + rec_loss
+            if use_fk_loss:
+                rec_fk_loss = content_criterion(sures_fk_batch, hires_fk_batch)
+
+        loss_G = gen_loss + gen_fk_loss + rec_loss + rec_fk_loss
 
         if not eval:
             loss_G.backward()
@@ -149,31 +170,32 @@ def iter_epoch(
         lores_batch = sample['x'].to(device).float()
         hires_batch = sample['y'].to(device).float()
 
-        if is_fk_loss:
-            transform = transform_fk
-        else:
-            transform = identity
-
         # Create label tensors.
         ones = torch.ones((len(lores_batch), 1)).to(device).float()
         zeros = torch.zeros((len(lores_batch), 1)).to(device).float()
 
-        if use_gan:
-            loss_D = update_discriminator(lores_batch, hires_batch, transform)
-        else:
-            loss_D = 0
+        loss_D = 0
+        loss_D_fk = 0
 
-        loss_G, psnr = update_generator(
-            lores_batch, hires_batch, use_gan, transform)
+        if use_gan:
+            loss_D = update_discriminator(
+                D, lores_batch, hires_batch, use_fk_loss=False)
+
+            if use_fk_loss:
+                loss_D_fk = update_discriminator(
+                    D_fk, lores_batch, hires_batch, use_fk_loss=True)
+
+        loss_G, psnr = update_generator(lores_batch, hires_batch, use_gan)
 
         mean_loss_G.append(loss_G)
         mean_loss_D.append(loss_D)
+        mean_loss_D_fk.append(loss_D_fk)
         mean_psnr.append(psnr)
 
     return {
         'G': mean(mean_loss_G),
         'D': mean(mean_loss_D),
-        'D_fk': mean(mean_loss_D_fk) if len(mean_loss_D_fk) > 0 else 0,
+        'D_fk': mean(mean_loss_D_fk),
         'psnr': mean(mean_psnr)
     }
 
@@ -191,13 +213,6 @@ def transform_fk(image, dataset_dim, is_batch=False):
     image_fk = image_fk.pow(2).sum(-1).sqrt()
 
     return image_fk
-
-
-def identity(input, **kwargs):
-    """
-    Return the input, disregarding any other argument.
-    """
-    return input
 
 
 def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
@@ -308,11 +323,7 @@ def main(args):
             output_dim=dataset.output_dim).to(device)
 
     # Initialize the discriminator model.
-    if args.is_fk_loss:
-        discriminator = Discriminator(
-            input_dim=dataset.output_dim_fk).to(device)
-    else:
-        discriminator = Discriminator(input_dim=dataset.output_dim).to(device)
+    discriminator = Discriminator(input_dim=dataset.output_dim).to(device)
 
     # Optimizers
     optim_G = optim.Adam(generator.parameters(), lr=args.lr)
@@ -324,7 +335,7 @@ def main(args):
         optimizer=optim_D, patience=args.scheduler_patience, verbose=True)
 
     # Initialize optional Fk discriminator and optimizer.
-    if args.fk_gan_loss:
+    if args.use_fk_loss and args.is_gan:
         discriminator_fk = Discriminator(
             input_dim=dataset.output_dim_fk).to(device)
         optim_D_fk = optim.Adam(discriminator_fk.parameters(), lr=args.lr)
@@ -353,7 +364,7 @@ def main(args):
             (optim_G, optim_D, optim_D_fk), train_data, device,
             batch_size=args.batch_size,
             reconstruction_criterion=reconstruction_criterion,
-            use_gan=args.is_gan, is_fk_loss=args.is_fk_loss)
+            use_gan=args.is_gan, use_fk_loss=args.use_fk_loss)
 
         # Report model performance.
         print(f"Epoch: {epoch}, G: {loss['G']}, D: {loss['D']}, "
@@ -368,7 +379,7 @@ def main(args):
                 (None, None, None), test_data, device,
                 batch_size=args.batch_size, eval=True,
                 reconstruction_criterion=reconstruction_criterion,
-                use_gan=args.is_gan, is_fk_loss=args.is_fk_loss)
+                use_gan=args.is_gan, use_fk_loss=args.use_fk_loss)
             print(f"Validation on epoch: {epoch}, G: {loss_val['G']}, "
                   f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}")
 
@@ -461,12 +472,9 @@ if __name__ == "__main__":
         '--is_gan', action='store_true',
         help="If set, use GAN loss.")
     training_group.add_argument(
-        '--is_fk_loss', action='store_true',
-        help="If set, use loss in Fk space.")
-    training_group.add_argument(
-        '--fk_gan_loss', action='store_true',
-        help="If set (in combination with `is_fk_loss`) use GAN loss for "
-        "Fk domain.")
+        '--use_fk_loss', action='store_true',
+        help="If set, an extra loss term is addded that evaluates the "
+        "Fk transform of the superresolution image.")
 
     # Misc arguments.
     misc_group = parser.add_argument_group('Miscellaneous')
