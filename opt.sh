@@ -17,6 +17,6 @@ module load cuDNN/7.0.5-CUDA-9.0.176
 module load NCCL/2.0.5-CUDA-9.0.176
 export LD_LIBRARY_PATH=/hpc/eb/Debian9/cuDNN/7.1-CUDA-8.0.44-GCCcore-5.4.0/lib64:$LD_LIBRARY_PATH
 
-pip3 install --user torch torchvision
+pip3 install --user torch torchvision hyperopt
 
-srun python3 train.py --device cuda:0
+srun python3 tuning.py

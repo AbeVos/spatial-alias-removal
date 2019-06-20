@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 
 from dataset import Data
-from models import SRCNN, Discriminator, EDSR
+from models import SRCNN, Discriminator, EDSR, PatchGAN, VDSR
 
 
 def split_dataset(dataset, test_percentage=0.1):
@@ -171,8 +171,12 @@ def iter_epoch(
         hires_batch = sample['y'].to(device).float()
 
         # Create label tensors.
-        ones = torch.ones((len(lores_batch), 1)).to(device).float()
-        zeros = torch.zeros((len(lores_batch), 1)).to(device).float()
+        if args.is_noisy_label:
+            ones = torch.empty((len(lores_batch), 1)).uniform_(0.7,1.2).to(device).float()
+            zeros = torch.empty((len(lores_batch), 1)).uniform_(0,0.3).to(device).float()
+        else:
+            ones = torch.ones((len(lores_batch), 1)).to(device).float()
+            zeros = torch.zeros((len(lores_batch), 1)).to(device).float()
 
         loss_D = 0
         loss_D_fk = 0
@@ -244,6 +248,7 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
     num_cols = 6
     num_rows = dataloader.batch_size
     output_dim = dataset[0]['y'].shape[1:]
+
 
     plt.figure(figsize=(9, 3 * num_rows))
 
@@ -319,6 +324,10 @@ def main(args):
                           output_dim=dataset.output_dim).to(device)
     elif args.model == 'EDSR':
         generator = EDSR(
+            args.latent_dim, args.num_res_blocks,
+            output_dim=dataset.output_dim).to(device)
+    elif args.model == 'VDSR':
+        generator = VDSR(
             args.latent_dim, args.num_res_blocks,
             output_dim=dataset.output_dim).to(device)
 
@@ -418,7 +427,7 @@ if __name__ == "__main__":
     data_group = parser.add_argument_group('Data')
 
     data_group.add_argument(
-        '--data_root', type=str, default='Data/',
+        '--data_root', type=str, default='Data_big/',
         help="Root directory of the data.")
     data_group.add_argument(
         '--filename_x', '-x', type=str, default='data_25',
@@ -441,10 +450,12 @@ if __name__ == "__main__":
         help="Model type.")
     model_group.add_argument(
         '--latent_dim', type=int, default=128,
-        help="dimensionality of the latent space, only relevant for EDSR")
+        help="dimensionality of the latent space, only relevant for EDSR and VDSR")
     model_group.add_argument(
         '--num_res_blocks', type=int, default=4,
-        help="Number of resblocks in model, only relevant for EDSR")
+        help="Number of resblocks in model, only relevant for EDSR and VDSR")
+
+
 
     # Training arguments.
     training_group = parser.add_argument_group('Training')
@@ -462,7 +473,7 @@ if __name__ == "__main__":
         '--scheduler_patience', type=int, default="10",
         help="How many epochs of no improvement to consider Plateau")
     training_group.add_argument(
-        '--is_psnr_step', action='store_true',
+        '--is_psnr_step', type=int, default="0",
         help="Use PSNR for scheduler or separate losses")
     training_group.add_argument(
         '--criterion_type', type=str, default="L1",
@@ -472,9 +483,11 @@ if __name__ == "__main__":
         '--is_gan', action='store_true',
         help="If set, use GAN loss.")
     training_group.add_argument(
-        '--use_fk_loss', action='store_true',
-        help="If set, an extra loss term is addded that evaluates the "
-        "Fk transform of the superresolution image.")
+        '--is_noisy_label', type=int, default="0",
+        help="If GAN is used, and this is True, the labels will be noisy")
+    training_group.add_argument(
+        '--is_fk_loss', type=int, default="1",
+        help="Use loss in fk space or not, 0 for False and 1 for True")
 
     # Misc arguments.
     misc_group = parser.add_argument_group('Miscellaneous')
@@ -489,7 +502,7 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type=int, default=10,
+        '--experiment_num', type=int, default=17,
         help="Id of the experiment running")
 
     args = parser.parse_args()
