@@ -24,6 +24,8 @@ class Data(Dataset):
         # Save data shapes for creating models.
         self.input_dim = x_transformed.shape[-2:]
         self.output_dim = y_transformed.shape[-2:]
+        self.output_dim_fk = list(self.output_dim)
+        self.output_dim_fk[-1] = self.output_dim_fk[-1] // 2 + 1
         
     def __len__(self):
         return self.data['X'].shape[0]
