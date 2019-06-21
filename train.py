@@ -294,12 +294,10 @@ def save_loss_plot(loss_g, loss_d, directory, is_val=False, name=None):
 
 def main(args):
     # Create directories if it's not  hyper-optimisation round.
-    if  not args.is_optimisation:
+    if not args.is_optimisation:
         results_directory = f'results/result_{args.experiment_num}'
         os.makedirs('images', exist_ok=True)
         os.makedirs(results_directory, exist_ok=True)
-
-
         # Save arguments for experiment reproducibility.
         with open(os.path.join(results_directory, 'arguments.txt'), 'w') as file:
             json.dump(args.__dict__, file, indent=2)
@@ -444,11 +442,11 @@ if __name__ == "__main__":
         '--data_root', type=str, default='Data_big/',
         help="Root directory of the data.")
     data_group.add_argument(
-        '--filename_x', '-x', type=str, default='data_25',
+        '--filename_x', '-x', type=str, default='data_20_big',
         help="Name of the low resolution data file (without the '.mat' "
         "extension).")
     data_group.add_argument(
-        '--filename_y', '-y', type=str, default='data_125',
+        '--filename_y', '-y', type=str, default='data_10_big',
         help="Name of the high resolution data filee (without the '.mat' "
         "extension).")
     data_group.add_argument(
@@ -459,14 +457,14 @@ if __name__ == "__main__":
     model_group = parser.add_argument_group('Model')
 
     model_group.add_argument(
-        '--model', type=str, default="EDSR",
+        '--model', type=str, default="VDSR",
         choices=['EDSR', 'SRCNN', "VDSR"],
         help="Model type.")
     model_group.add_argument(
-        '--latent_dim', type=int, default=128,
+        '--latent_dim', type=int, default=256,
         help="dimensionality of the latent space, only relevant for EDSR and VDSR")
     model_group.add_argument(
-        '--num_res_blocks', type=int, default=4,
+        '--num_res_blocks', type=int, default=6,
         help="Number of resblocks in model, only relevant for EDSR and VDSR")
 
 
@@ -481,10 +479,10 @@ if __name__ == "__main__":
         '--batch_size', type=int, default=8,
         help="batch size")
     training_group.add_argument(
-        '--lr', type=float, default=0.002,
+        '--lr', type=float, default=0.001,
         help="learning rate")
     training_group.add_argument(
-        '--scheduler_patience', type=int, default="10",
+        '--scheduler_patience', type=int, default="5",
         help="How many epochs of no improvement to consider Plateau")
     training_group.add_argument(
         '--is_psnr_step', type=int, default="0",
@@ -494,7 +492,7 @@ if __name__ == "__main__":
         choices=['MSE', 'L1', 'None'],
         help="Reconstruction criterion to use.")
     training_group.add_argument(
-        '--is_gan', action='store_true',
+        '--is_gan',  type=int, default="0",
         help="If set, use GAN loss.")
     training_group.add_argument(
         '--is_noisy_label', type=int, default="0",
