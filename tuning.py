@@ -118,6 +118,7 @@ def main(hyper_args):
 
         #if impossible combination, return a fail
         if params['criterion_type'] =='None' and params['is_gan']==0:
+            print("Unfortunately, this combination of parameters is not possible.")
             return {'loss': 0, 'status': 'fail'}
         #getting params
         iter_num = len(trials.trials)
@@ -137,14 +138,14 @@ def main(hyper_args):
         #saving models actual losses
         torch.save(generator, os.path.join(f"{results_directory}/models", f'generator_{iter_num}.pth'))
         #saving trials, here, because can be the case that stops inbetween evaluations
-        pickle.dump(trials, open(f"{results_directory}/{hyper_args.previous_trials_name}.pkl", "wb"))
+        pickle.dump(trials, open(f"{results_directory}/{hyper_args.trails_name_to_save}.pkl", "wb"))
         return {
             'loss': loss,
             'status': STATUS_OK, #'ok' or 'fail'
         }
 
     #initial distribution of hyper-parameter space
-    space ={"num_epochs":hp.quniform('num_epochs', 10, 300, 10),
+    space ={"num_epochs":hp.quniform('num_epochs', 1, 2, 1),
             "model_choice": hp.choice('model_choice',
                                       [{'model': 'EDSR', 'latent_dim': hp.quniform('latent_dim_edsr', 32, 257, 1), 'num_res_blocks': hp.quniform('num_res_block_edsr', 1, 12, 1)},
                                        {'model': 'VDSR', 'latent_dim': hp.quniform('latent_dim_vdsr', 32, 257, 1), 'num_res_blocks': hp.quniform('num_blocks_vdsr', 1, 12, 1)},
@@ -172,6 +173,7 @@ def main(hyper_args):
     if hyper_args.previous_trials_name is None:
         trials = Trials()
         max_evals =hyper_args.eval_number
+        print("Initialising new trials")
     else:
         #load trials
         trials = pickle.load(open(f"{results_directory}/{hyper_args.previous_trials_name}.pkl", "rb"))
@@ -183,7 +185,7 @@ def main(hyper_args):
                 algo=tpe.suggest,
                 max_evals=max_evals,
                 trials=trials)
-    pickle.dump(trials, open(f"{results_directory}/{hyper_args.previous_trials_name}.pkl", "wb"))
+    pickle.dump(trials, open(f"{results_directory}/{hyper_args.trails_name_to_save}.pkl", "wb"))
     print(best)
 
 if __name__ == "__main__":
@@ -195,6 +197,8 @@ if __name__ == "__main__":
                         help="Folder where all the results of the optimisation will reside")
     parser.add_argument("--previous_trials_name", type = str, default=None,
                     help="Name of trials to start with. If none, starts from scratch")
+    parser.add_argument("--trails_name_to_save", type = str, default="trials",
+                        help="Name of trials to save the results to.")
 
 
     hyper_args = parser.parse_args()

@@ -35,7 +35,7 @@ def split_dataset(dataset, test_percentage=0.1):
 def iter_epoch(
         models, optimizers, dataset, device='cuda:0', batch_size=64,
         eval=False, reconstruction_criterion=nn.MSELoss(),
-        use_gan=True, use_fk_loss=False):
+        use_gan=True, use_fk_loss=False, use_noisy_labels = False):
     """
     Train both generator and discriminator for a single epoch.
     Parameters
@@ -171,7 +171,7 @@ def iter_epoch(
         hires_batch = sample['y'].to(device).float()
 
         # Create label tensors.
-        if args.is_noisy_label:
+        if use_noisy_labels:
             ones = torch.empty((len(lores_batch), 1)).uniform_(0.7,1.2).to(device).float()
             zeros = torch.empty((len(lores_batch), 1)).uniform_(0,0.3).to(device).float()
         else:
@@ -272,29 +272,37 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
     plt.close()
 
 
-def save_loss_plot(loss_g, loss_d, directory, is_val=False):
+def save_loss_plot(loss_g, loss_d, directory, is_val=False, name=None):
     plt.figure()
     plt.plot(loss_d, label="Discriminator loss")
     plt.plot(loss_g, label="Generator loss")
     plt.legend()
 
     if is_val:
-        plt.savefig(f"{directory}/gan_loss_val.png")
+        if name is None:
+            plt.savefig(f"{directory}/gan_loss_val.png")
+        else:
+            plt.savefig(f"{directory}/gan_loss_val_{name}.png")
     else:
-        plt.savefig(f"{directory}/gan_loss.png")
+        if name is None:
+            plt.savefig(f"{directory}/gan_loss.png")
+        else:
+            plt.savefig(f"{directory}/gan_loss_{name}.png")
 
     plt.close()
 
 
 def main(args):
-    # Create directories.
-    results_directory = f'results/result_{args.experiment_num}'
-    os.makedirs('images', exist_ok=True)
-    os.makedirs(results_directory, exist_ok=True)
+    # Create directories if it's not  hyper-optimisation round.
+    if  not args.is_optimisation:
+        results_directory = f'results/result_{args.experiment_num}'
+        os.makedirs('images', exist_ok=True)
+        os.makedirs(results_directory, exist_ok=True)
 
-    # Save arguments for experiment reproducibility.
-    with open(os.path.join(results_directory, 'arguments.txt'), 'w') as file:
-        json.dump(args.__dict__, file, indent=2)
+
+        # Save arguments for experiment reproducibility.
+        with open(os.path.join(results_directory, 'arguments.txt'), 'w') as file:
+            json.dump(args.__dict__, file, indent=2)
 
     # Set size for plots.
     plt.rcParams['figure.figsize'] = (10, 10)
@@ -312,9 +320,9 @@ def main(args):
             transforms.ToTensor(),
         ])
     )
-
-    print(f"Data sizes, input: {dataset.input_dim}, output: "
-          f"{dataset.output_dim}, Fk: {dataset.output_dim_fk}")
+    if not args.is_optimisation:
+        print(f"Data sizes, input: {dataset.input_dim}, output: "
+            f"{dataset.output_dim}, Fk: {dataset.output_dim_fk}")
 
     train_data, test_data = split_dataset(dataset, args.test_percentage)
 
@@ -376,24 +384,27 @@ def main(args):
             use_gan=args.is_gan, use_fk_loss=args.use_fk_loss)
 
         # Report model performance.
-        print(f"Epoch: {epoch}, G: {loss['G']}, D: {loss['D']}, "
-              f"PSNR: {loss['psnr']}")
+        if  not args.is_optimisation:
+            print(f"Epoch: {epoch}, G: {loss['G']}, D: {loss['D']}, "
+                f"PSNR: {loss['psnr']}")
         plot_log['G'].append(loss['G'])
         plot_log['D'].append(loss['D'])
 
-        # Model evaluation.
-        if epoch % args.eval_interval == 0:
+        # Model evaluation every eval_iteration and last iteration.
+        if epoch % args.eval_interval == 0 or (args.is_optimisation and epoch == args.n_epochs - 1 ):
             loss_val = iter_epoch(
                 (generator, discriminator, discriminator_fk),
                 (None, None, None), test_data, device,
                 batch_size=args.batch_size, eval=True,
                 reconstruction_criterion=reconstruction_criterion,
-                use_gan=args.is_gan, use_fk_loss=args.use_fk_loss)
-            print(f"Validation on epoch: {epoch}, G: {loss_val['G']}, "
-                  f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}")
+                use_gan=args.is_gan, use_fk_loss=args.use_fk_loss, use_noisy_labels=args.is_noisy_label)
+            if not args.is_optimisation:
+                print(f"Validation on epoch: {epoch}, G: {loss_val['G']}, "
+                       f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}")
 
             plot_log['G_val'].append(loss_val['G'])
             plot_log['D_val'].append(loss_val['D'])
+            plot_log['psnr_val'].append(loss_val['psnr'])
 
             # Update scheduler based on PSNR or separate model losses.
             if args.is_psnr_step:
@@ -402,22 +413,25 @@ def main(args):
             else:
                 scheduler_g.step(loss_val['G'])
                 scheduler_d.step(loss_val['D'])
+            if not args.is_optimisation:
+                save_loss_plot(plot_log['G_val'], plot_log['D_val'],
+                              results_directory, is_val=True)
 
-            save_loss_plot(plot_log['G_val'], plot_log['D_val'],
-                           results_directory, is_val=True)
+        if not args.is_optimisation:
+            # Plot results.
+            if epoch % args.save_interval == 0:
+                plot_samples(generator, test_data, epoch, device,
+                             results_directory)
+                plot_samples(generator, train_data, epoch, device,
+                             results_directory, is_train=True)
 
-        # Plot results.
-        if epoch % args.save_interval == 0:
-            plot_samples(generator, test_data, epoch, device,
-                         results_directory)
-            plot_samples(generator, train_data, epoch, device,
-                         results_directory, is_train=True)
+            save_loss_plot(plot_log['G'], plot_log['D'], results_directory)
 
-        save_loss_plot(plot_log['G'], plot_log['D'], results_directory)
-
-    # Save the trained generator model.
-    torch.save(generator, os.path.join(results_directory, 'generator.pth'))
-
+    if not args.is_optimisation:
+        # Save the trained generator model.
+        torch.save(generator, os.path.join(results_directory, 'generator.pth'))
+    if args.is_optimisation:
+        return plot_log, generator, test_data
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -446,7 +460,7 @@ if __name__ == "__main__":
 
     model_group.add_argument(
         '--model', type=str, default="EDSR",
-        choices=['EDSR', 'SRCNN'],
+        choices=['EDSR', 'SRCNN', "VDSR"],
         help="Model type.")
     model_group.add_argument(
         '--latent_dim', type=int, default=128,
@@ -486,7 +500,7 @@ if __name__ == "__main__":
         '--is_noisy_label', type=int, default="0",
         help="If GAN is used, and this is True, the labels will be noisy")
     training_group.add_argument(
-        '--is_fk_loss', type=int, default="1",
+        '--use_fk_loss', type=int, default="1",
         help="Use loss in fk space or not, 0 for False and 1 for True")
 
     # Misc arguments.
@@ -502,8 +516,12 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type=int, default=17,
+        '--experiment_num', type = int, default=17,
         help="Id of the experiment running")
+    misc_group.add_argument(
+        "--is_optimisation", type=int, default=0,
+        help="True or False for whether the run is called by the hyperopt"
+    )
 
     args = parser.parse_args()
 
