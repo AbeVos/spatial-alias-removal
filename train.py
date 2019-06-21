@@ -464,7 +464,7 @@ if __name__ == "__main__":
         '--latent_dim', type=int, default=256,
         help="dimensionality of the latent space, only relevant for EDSR and VDSR")
     model_group.add_argument(
-        '--num_res_blocks', type=int, default=6,
+        '--num_res_blocks', type=int, default=4,
         help="Number of resblocks in model, only relevant for EDSR and VDSR")
 
 
@@ -473,7 +473,7 @@ if __name__ == "__main__":
     training_group = parser.add_argument_group('Training')
 
     training_group.add_argument(
-        '--n_epochs', type=int, default=100,
+        '--n_epochs', type=int, default=80,
         help="number of epochs")
     training_group.add_argument(
         '--batch_size', type=int, default=8,
@@ -483,7 +483,7 @@ if __name__ == "__main__":
         help="learning rate")
     training_group.add_argument(
         '--scheduler_patience', type=int, default="5",
-        help="How many epochs of no improvement to consider Plateau")
+        help="How many val epochs of no improvement to consider Plateau")
     training_group.add_argument(
         '--is_psnr_step', type=int, default="0",
         help="Use PSNR for scheduler or separate losses")
@@ -505,7 +505,7 @@ if __name__ == "__main__":
     misc_group = parser.add_argument_group('Miscellaneous')
 
     misc_group.add_argument(
-        '--eval_interval', type=int, default=10,
+        '--eval_interval', type=int, default=4,
         help="evaluate on test set every eval_interval epochs")
     misc_group.add_argument(
         '--save_interval', type=int, default=10,
@@ -514,7 +514,7 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type = int, default=17,
+        '--experiment_num', type = int, default=18,
         help="Id of the experiment running")
     misc_group.add_argument(
         "--is_optimisation", type=int, default=0,

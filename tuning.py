@@ -191,11 +191,11 @@ def main(hyper_args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--eval_number", type=int, default=2,
+    parser.add_argument("--eval_number", type=int, default=10,
                         help="Number of iterations the hyperoptimisation will run for")
     parser.add_argument("--results_folder", type = str, default="hyper_results",
                         help="Folder where all the results of the optimisation will reside")
-    parser.add_argument("--previous_trials_name", type = str, default=None,
+    parser.add_argument("--previous_trials_name", type = str, default="trials",
                     help="Name of trials to start with. If none, starts from scratch")
     parser.add_argument("--trails_name_to_save", type = str, default="trials",
                         help="Name of trials to save the results to.")
