@@ -5,6 +5,7 @@ influence of number of samples on the model's performance.
 import argparse
 import json
 import numpy as np
+import matplotlib.pyplot as plt
 
 from itertools import chain
 
@@ -17,14 +18,14 @@ if __name__ == "__main__":
         " the influence of number of samples on the models' performance.")
 
     parser.add_argument(
-        dest='argument_file',
+        '-f', dest='argument_file', default='results/result_18/arguments.txt',
         help="The argument file contains all arguments needed to train "
         "the model.")
     parser.add_argument(
-        '-n', dest='n_experiments',
+        '-n', dest='n_experiments', default=5,
         help="Number of experiments.")
     parser.add_argument(
-        '--device', default='cpu',
+        '--device', default='cuda',
         help="The device to train the models on.")
     args = parser.parse_args()
 
@@ -36,7 +37,10 @@ if __name__ == "__main__":
     arguments["is_optimisation"] = 1
     arguments["device"] = args.device
 
-    for percentage in np.linspace(0, 1, args.n_experiments):
+    psnr_plot = []
+
+    percentages = np.linspace(0, 1, args.n_experiments + 2)[1:-1]
+    for percentage in percentages:
         arguments["test_percentage"] = float(percentage)
 
         # Create a new parser and fill it with the arguments from the file.
@@ -52,10 +56,14 @@ if __name__ == "__main__":
         argument_values = list(chain(*argument_values))
 
         model_args = model_parser.parse_args(argument_values)
-        print(model_args)
-
 
         # Train the model with the loaded arguments.
-        plot_log, _, _ = main(model_args)
-        psnr = plot_log['psnr_val'][-1]
-        print(psnr)
+        # plot_log, _, _ = main(model_args)
+        # psnr = plot_log['psnr_val'][-1]
+
+        psnr = np.random.random(1)
+        psnr_plot.append(psnr)
+
+    plt.plot(psnr_plot, percentages, label="PSNR")
+    plt.legend()
+    plt.savefig("less_data.png")
