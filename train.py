@@ -12,7 +12,7 @@ from statistics import mean
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 
-from dataset import Data
+from dataset import Data, ToTensor, RandomHorizontalFlip
 from models import SRCNN, Discriminator, EDSR, VDSR
 
 
@@ -315,12 +315,17 @@ def main(args):
     # TODO : Add normalisation  transforms.Normalize(
     #   torch.tensor(-4.4713e-07).float(),
     #   torch.tensor(0.1018).float())
+    # TODO: Add more data augmentation transforms.
+    data_transforms = transforms.Compose([
+        RandomHorizontalFlip(),
+        ToTensor()
+    ])
+
     dataset = Data(
         args.filename_x, args.filename_y, args.data_root,
-        transforms=transforms.Compose([
-            transforms.ToTensor(),
-        ])
-    )
+        transform=data_transforms)
+    print(len(dataset))
+
     if not args.is_optimisation:
         print(f"Data sizes, input: {dataset.input_dim}, output: "
               f"{dataset.output_dim}, Fk: {dataset.output_dim_fk}")
