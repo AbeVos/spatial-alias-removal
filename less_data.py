@@ -58,12 +58,13 @@ if __name__ == "__main__":
         model_args = model_parser.parse_args(argument_values)
 
         # Train the model with the loaded arguments.
-        # plot_log, _, _ = main(model_args)
-        # psnr = plot_log['psnr_val'][-1]
+        plot_log, _, _ = main(model_args)
+        psnr = plot_log['psnr_val'][-1]
 
-        psnr = np.random.random(1)
+        # psnr = np.random.random(1)
         psnr_plot.append(psnr)
 
-    plt.plot(psnr_plot, percentages, label="PSNR")
+    percentages = [f"{100*value:.1f}%" for value in percentages]
+    plt.plot(percentages, psnr_plot, label="PSNR")
     plt.legend()
     plt.savefig("less_data.png")
