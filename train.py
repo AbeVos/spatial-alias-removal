@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 
 from dataset import Data
-from models import SRCNN, Discriminator, EDSR, PatchGAN, VDSR
+from models import SRCNN, Discriminator, EDSR, VDSR
 
 
 def split_dataset(dataset, test_percentage=0.1):
@@ -35,7 +35,7 @@ def split_dataset(dataset, test_percentage=0.1):
 def iter_epoch(
         models, optimizers, dataset, device='cuda:0', batch_size=64,
         eval=False, reconstruction_criterion=nn.MSELoss(),
-        use_gan=True, use_fk_loss=False, use_noisy_labels = False):
+        use_gan=True, use_fk_loss=False, use_noisy_labels=False):
     """
     Train both generator and discriminator for a single epoch.
     Parameters
@@ -147,7 +147,8 @@ def iter_epoch(
             optim_G.step()
             optim_G.zero_grad()
 
-        psnr = 10 * log10(1 / nn.functional.mse_loss(sures_batch, hires_batch).item())
+        psnr = 10 * log10(1 / nn.functional.mse_loss(
+            sures_batch, hires_batch).item())
 
         return loss_G.item(), psnr
 
@@ -172,8 +173,10 @@ def iter_epoch(
 
         # Create label tensors.
         if use_noisy_labels:
-            ones = torch.empty((len(lores_batch), 1)).uniform_(0.7,1.2).to(device).float()
-            zeros = torch.empty((len(lores_batch), 1)).uniform_(0,0.3).to(device).float()
+            ones = torch.empty(
+                (len(lores_batch), 1)).uniform_(0.7, 1.2).to(device).float()
+            zeros = torch.empty(
+                (len(lores_batch), 1)).uniform_(0, 0.3).to(device).float()
         else:
             ones = torch.ones((len(lores_batch), 1)).to(device).float()
             zeros = torch.zeros((len(lores_batch), 1)).to(device).float()
@@ -249,7 +252,6 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
     num_rows = dataloader.batch_size
     output_dim = dataset[0]['y'].shape[1:]
 
-
     plt.figure(figsize=(9, 3 * num_rows))
 
     for idx, (lores, sures, hires) \
@@ -299,7 +301,8 @@ def main(args):
         os.makedirs('images', exist_ok=True)
         os.makedirs(results_directory, exist_ok=True)
         # Save arguments for experiment reproducibility.
-        with open(os.path.join(results_directory, 'arguments.txt'), 'w') as file:
+        with open(os.path.join(results_directory, 'arguments.txt'), 'w') \
+                as file:
             json.dump(args.__dict__, file, indent=2)
 
     # Set size for plots.
@@ -320,7 +323,7 @@ def main(args):
     )
     if not args.is_optimisation:
         print(f"Data sizes, input: {dataset.input_dim}, output: "
-            f"{dataset.output_dim}, Fk: {dataset.output_dim_fk}")
+              f"{dataset.output_dim}, Fk: {dataset.output_dim_fk}")
 
     train_data, test_data = split_dataset(dataset, args.test_percentage)
 
@@ -382,23 +385,25 @@ def main(args):
             use_gan=args.is_gan, use_fk_loss=args.use_fk_loss)
 
         # Report model performance.
-        if  not args.is_optimisation:
+        if not args.is_optimisation:
             print(f"Epoch: {epoch}, G: {loss['G']}, D: {loss['D']}, "
-                f"PSNR: {loss['psnr']}")
+                  f"PSNR: {loss['psnr']}")
         plot_log['G'].append(loss['G'])
         plot_log['D'].append(loss['D'])
 
         # Model evaluation every eval_iteration and last iteration.
-        if epoch % args.eval_interval == 0 or (args.is_optimisation and epoch == args.n_epochs - 1 ):
+        if epoch % args.eval_interval == 0 \
+                or (args.is_optimisation and epoch == args.n_epochs - 1):
             loss_val = iter_epoch(
                 (generator, discriminator, discriminator_fk),
                 (None, None, None), test_data, device,
                 batch_size=args.batch_size, eval=True,
                 reconstruction_criterion=reconstruction_criterion,
-                use_gan=args.is_gan, use_fk_loss=args.use_fk_loss, use_noisy_labels=args.is_noisy_label)
+                use_gan=args.is_gan, use_fk_loss=args.use_fk_loss,
+                use_noisy_labels=args.is_noisy_label)
             if not args.is_optimisation:
                 print(f"Validation on epoch: {epoch}, G: {loss_val['G']}, "
-                       f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}")
+                      f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}")
 
             plot_log['G_val'].append(loss_val['G'])
             plot_log['D_val'].append(loss_val['D'])
@@ -408,12 +413,19 @@ def main(args):
             if args.is_psnr_step:
                 scheduler_g.step(loss_val['psnr'])
                 scheduler_d.step(loss_val['psnr'])
+
+                if args.use_fk_loss and args.is_gan:
+                    scheduler_d_fk.step(loss_val['psnr'])
             else:
                 scheduler_g.step(loss_val['G'])
                 scheduler_d.step(loss_val['D'])
+
+                if args.use_fk_loss and args.is_gan:
+                    scheduler_d_fk.step(loss_val['D_fk'])
+
             if not args.is_optimisation:
                 save_loss_plot(plot_log['G_val'], plot_log['D_val'],
-                              results_directory, is_val=True)
+                               results_directory, is_val=True)
 
         if not args.is_optimisation:
             # Plot results.
@@ -430,6 +442,7 @@ def main(args):
         torch.save(generator, os.path.join(results_directory, 'generator.pth'))
     if args.is_optimisation:
         return plot_log, generator, test_data
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -462,12 +475,11 @@ if __name__ == "__main__":
         help="Model type.")
     model_group.add_argument(
         '--latent_dim', type=int, default=256,
-        help="dimensionality of the latent space, only relevant for EDSR and VDSR")
+        help="dimensionality of the latent space, only relevant for "
+        "EDSR and VDSR")
     model_group.add_argument(
         '--num_res_blocks', type=int, default=4,
         help="Number of resblocks in model, only relevant for EDSR and VDSR")
-
-
 
     # Training arguments.
     training_group = parser.add_argument_group('Training')
@@ -514,7 +526,7 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type = int, default=18,
+        '--experiment_num', type=int, default=18,
         help="Id of the experiment running")
     misc_group.add_argument(
         "--is_optimisation", type=int, default=0,
