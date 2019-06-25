@@ -269,9 +269,9 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
 
     plt.tight_layout()
     if not is_train:
-        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}.png'))
+        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}.pdf'))
     else:
-        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}_train.png'))
+        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}_train.pdf'))
     plt.close()
 
 
@@ -318,7 +318,7 @@ def main(args):
     #   torch.tensor(0.1018).float())
     # TODO: Add more data augmentation transforms.
     data_transforms = transforms.Compose([
-        RandomHorizontalFlip(),
+      #  RandomHorizontalFlip(),
         ToTensor()
     ])
 
@@ -446,8 +446,22 @@ def main(args):
     if not args.is_optimisation:
         # Save the trained generator model.
         torch.save(generator, os.path.join(results_directory, 'generator.pth'))
+        if args.save_test_dataset:
+            list_x = []
+            list_y = []
+            for sample in test_data:
+                list_x.append(sample['x'].unsqueeze(0))
+                list_y.append(sample['y'].unsqueeze(0))
+            tensor_x = torch.cat(list_x, 0)
+            tensor_y = torch.cat(list_y, 0)
+            data_folder_for_results = 'final/data'
+            os.makedirs(data_folder_for_results, exist_ok=True)
+            torch.save(tensor_x, f'{data_folder_for_results}/data_x_{args.experiment_num}.pt')
+            torch.save(tensor_y, f'{data_folder_for_results}/data_y_{args.experiment_num}.pt')
+
     if args.is_optimisation:
-        return plot_log, generator, test_data
+        __, test_data = random_split(test_data, [-1, 2])
+        return plot_log, generator.detach(), test_data
 
 
 if __name__ == "__main__":
@@ -476,7 +490,7 @@ if __name__ == "__main__":
     model_group = parser.add_argument_group('Model')
 
     model_group.add_argument(
-        '--model', type=str, default="VDSR",
+        '--model', type=str, default="SRCNN",
         choices=['EDSR', 'SRCNN', "VDSR"],
         help="Model type.")
     model_group.add_argument(
@@ -491,7 +505,7 @@ if __name__ == "__main__":
     training_group = parser.add_argument_group('Training')
 
     training_group.add_argument(
-        '--n_epochs', type=int, default=80,
+        '--n_epochs', type=int, default=10,
         help="number of epochs")
     training_group.add_argument(
         '--batch_size', type=int, default=8,
@@ -506,7 +520,7 @@ if __name__ == "__main__":
         '--is_psnr_step', type=int, default="0",
         help="Use PSNR for scheduler or separate losses")
     training_group.add_argument(
-        '--criterion_type', type=str, default="L1",
+        '--criterion_type', type=str, default="MSE",
         choices=['MSE', 'L1', 'None'],
         help="Reconstruction criterion to use.")
     training_group.add_argument(
@@ -516,7 +530,7 @@ if __name__ == "__main__":
         '--is_noisy_label', type=int, default="0",
         help="If GAN is used, and this is True, the labels will be noisy")
     training_group.add_argument(
-        '--use_fk_loss', type=int, default="1",
+        '--use_fk_loss', type=int, default="0",
         help="Use loss in fk space or not, 0 for False and 1 for True")
 
     # Misc arguments.
@@ -532,11 +546,15 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type=int, default=18,
+        '--experiment_num', type=int, default=25,
         help="Id of the experiment running")
     misc_group.add_argument(
         "--is_optimisation", type=int, default=0,
         help="True or False for whether the run is called by the hyperopt"
+    )
+    misc_group.add_argument(
+        "--save_test_dataset", type=int, default=1,
+        help="True or False for option to save test dataset "
     )
 
     args = parser.parse_args()
