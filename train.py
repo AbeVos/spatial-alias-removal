@@ -235,7 +235,8 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
             plt.title(title)
 
         plt.imshow(image.squeeze().detach().cpu(),
-                   interpolation='none', cmap=cmap)
+                   interpolation='none', cmap=cmap, 
+                   vmin=0, vmax=1)
         plt.axis('off')
 
     dataloader = DataLoader(dataset, shuffle=False, batch_size=2)
