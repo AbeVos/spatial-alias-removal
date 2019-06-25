@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     # Create percentages to experiment on.
     percentages = np.linspace(0.1, 0.9, args.n_experiments)
-    percentages_display = [f"{100*(1-value):.1f}%" for value in percentages]
+    percentages_display = [100 * (1 - value) for value in percentages]
     for idx, percentage in enumerate(percentages):
         arguments["test_percentage"] = float(percentage)
         print(f"Training with test percentage {100 * float(percentage):0.1f}%")
@@ -70,7 +70,8 @@ if __name__ == "__main__":
 
         plt.figure()
         plt.plot(percentages_display[:idx+1], psnr_plot)
-        plt.xlabel("Ratio of data used for training")
+        plt.xlabel("Ratio of data used for training (%)")
         plt.ylabel("Test set PSNR")
+        plt.tight_layout()
         plt.savefig("less_data.png")
         plt.close()
