@@ -11,7 +11,7 @@ from math import log10
 from statistics import mean
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
-
+import pytorch_ssim
 from dataset import Data, ToTensor, RandomHorizontalFlip
 from models import SRCNN, Discriminator, EDSR, VDSR
 
@@ -149,8 +149,9 @@ def iter_epoch(
 
         psnr = 10 * log10(1 / nn.functional.mse_loss(
             sures_batch, hires_batch).item())
+        ssim = pytorch_ssim.ssim(sures_batch, hires_batch)
 
-        return loss_G.item(), psnr
+        return loss_G.item(), psnr, ssim.item()
 
     G, D, D_fk = models
     optim_G, optim_D, optim_D_fk = optimizers
@@ -163,6 +164,7 @@ def iter_epoch(
     mean_loss_D = []
     mean_loss_D_fk = []
     mean_psnr = []
+    mean_ssim = []
 
     content_criterion = reconstruction_criterion
     criterion = nn.BCEWithLogitsLoss()
@@ -192,18 +194,21 @@ def iter_epoch(
                 loss_D_fk = update_discriminator(
                     D_fk, lores_batch, hires_batch, use_fk_loss=True)
 
-        loss_G, psnr = update_generator(lores_batch, hires_batch, use_gan)
+        loss_G, psnr, ssim = update_generator(lores_batch, hires_batch, use_gan)
 
         mean_loss_G.append(loss_G)
         mean_loss_D.append(loss_D)
         mean_loss_D_fk.append(loss_D_fk)
         mean_psnr.append(psnr)
 
+        mean_ssim.append(ssim)
+
     return {
         'G': mean(mean_loss_G),
         'D': mean(mean_loss_D),
         'D_fk': mean(mean_loss_D_fk),
-        'psnr': mean(mean_psnr)
+        'psnr': mean(mean_psnr),
+        'ssim': mean(mean_ssim)
     }
 
 
@@ -393,7 +398,7 @@ def main(args):
         # Report model performance.
         if not args.is_optimisation:
             print(f"Epoch: {epoch}, G: {loss['G']}, D: {loss['D']}, "
-                  f"PSNR: {loss['psnr']}")
+                  f"PSNR: {loss['psnr']}, SSIM: {loss['ssim']}")
         plot_log['G'].append(loss['G'])
         plot_log['D'].append(loss['D'])
 
@@ -409,11 +414,12 @@ def main(args):
                 use_noisy_labels=args.is_noisy_label)
             if not args.is_optimisation:
                 print(f"Validation on epoch: {epoch}, G: {loss_val['G']}, "
-                      f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}")
+                      f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}, SSIM: {loss_val['ssim']}")
 
             plot_log['G_val'].append(loss_val['G'])
             plot_log['D_val'].append(loss_val['D'])
             plot_log['psnr_val'].append(loss_val['psnr'])
+            plot_log['ssim_val'].append(loss_val['ssim'])
 
             # Update scheduler based on PSNR or separate model losses.
             if args.is_psnr_step:
@@ -460,7 +466,7 @@ def main(args):
             torch.save(tensor_y, f'{data_folder_for_results}/data_y_{args.experiment_num}.pt')
 
     if args.is_optimisation:
-        __, test_data = random_split(test_data, [-1, 2])
+        __, test_data = random_split(test_data, [len(test_data)-2, 2])
         return plot_log, generator.detach(), test_data
 
 
@@ -490,11 +496,11 @@ if __name__ == "__main__":
     model_group = parser.add_argument_group('Model')
 
     model_group.add_argument(
-        '--model', type=str, default="SRCNN",
+        '--model', type=str, default="EDSR",
         choices=['EDSR', 'SRCNN', "VDSR"],
         help="Model type.")
     model_group.add_argument(
-        '--latent_dim', type=int, default=256,
+        '--latent_dim', type=int, default=128,
         help="dimensionality of the latent space, only relevant for "
         "EDSR and VDSR")
     model_group.add_argument(
@@ -505,7 +511,7 @@ if __name__ == "__main__":
     training_group = parser.add_argument_group('Training')
 
     training_group.add_argument(
-        '--n_epochs', type=int, default=10,
+        '--n_epochs', type=int, default=50,
         help="number of epochs")
     training_group.add_argument(
         '--batch_size', type=int, default=8,
@@ -520,7 +526,7 @@ if __name__ == "__main__":
         '--is_psnr_step', type=int, default="0",
         help="Use PSNR for scheduler or separate losses")
     training_group.add_argument(
-        '--criterion_type', type=str, default="MSE",
+        '--criterion_type', type=str, default="L1",
         choices=['MSE', 'L1', 'None'],
         help="Reconstruction criterion to use.")
     training_group.add_argument(
@@ -530,7 +536,7 @@ if __name__ == "__main__":
         '--is_noisy_label', type=int, default="0",
         help="If GAN is used, and this is True, the labels will be noisy")
     training_group.add_argument(
-        '--use_fk_loss', type=int, default="0",
+        '--use_fk_loss', type=int, default="1",
         help="Use loss in fk space or not, 0 for False and 1 for True")
 
     # Misc arguments.
@@ -546,7 +552,7 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type=int, default=25,
+        '--experiment_num', type=int, default=26,
         help="Id of the experiment running")
     misc_group.add_argument(
         "--is_optimisation", type=int, default=0,
