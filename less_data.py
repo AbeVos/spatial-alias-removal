@@ -18,11 +18,11 @@ if __name__ == "__main__":
         " the influence of number of samples on the models' performance.")
 
     parser.add_argument(
-        '-f', dest='argument_file', default='results/result_18/arguments.txt',
+        '-f', dest='argument_file', default='test_arguments.txt',
         help="The argument file contains all arguments needed to train "
         "the model.")
     parser.add_argument(
-        '-n', dest='n_experiments', default=5,
+        '-n', dest='n_experiments', default=10,
         help="Number of experiments.")
     parser.add_argument(
         '--device', default='cuda',
@@ -34,14 +34,18 @@ if __name__ == "__main__":
 
     # Make sure the training will return its results.
     arguments["experiment_num"] = 1000
-    arguments["is_optimisation"] = 1
+    arguments["is_optimisation"] = 0
     arguments["device"] = args.device
 
     psnr_plot = []
 
+    # Create percentages to experiment on. Skip the first and last elements
+    # since either the train or test set for either of these will be empty.
     percentages = np.linspace(0, 1, args.n_experiments + 2)[1:-1]
-    for percentage in percentages:
+    percentages_display = [f"{100*(1-value):.1f}%" for value in percentages]
+    for idx, percentage in enumerate(percentages):
         arguments["test_percentage"] = float(percentage)
+        print(f"Training with test percentage {100 * float(percentage):0.1f}%")
 
         # Create a new parser and fill it with the arguments from the file.
         model_parser = argparse.ArgumentParser()
@@ -64,7 +68,9 @@ if __name__ == "__main__":
         # psnr = np.random.random(1)
         psnr_plot.append(psnr)
 
-    percentages = [f"{100*value:.1f}%" for value in percentages]
-    plt.plot(percentages, psnr_plot, label="PSNR")
-    plt.legend()
-    plt.savefig("less_data.png")
+        plt.figure()
+        plt.plot(percentages_display[:idx+1], psnr_plot)
+        plt.xlabel("Ratio of data used for training")
+        plt.ylabel("Test set PSNR")
+        plt.savefig("less_data.png")
+        plt.close()

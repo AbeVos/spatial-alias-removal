@@ -1,0 +1,23 @@
+{
+  "data_root": "Data_big/",
+  "filename_x": "data_20_big",
+  "filename_y": "data_10_big",
+  "test_percentage": 0.1,
+  "model": "SRCNN",
+  "latent_dim": 256,
+  "num_res_blocks": 4,
+  "n_epochs": 20,
+  "batch_size": 8,
+  "lr": 0.001,
+  "scheduler_patience": 5,
+  "is_psnr_step": 0,
+  "criterion_type": "L1",
+  "is_gan": 0,
+  "is_noisy_label": 0,
+  "use_fk_loss": 1,
+  "eval_interval": 4,
+  "save_interval": 10,
+  "device": "cuda:0",
+  "experiment_num": 1000,
+  "is_optimisation": 1
+}

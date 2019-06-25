@@ -440,6 +440,7 @@ def main(args):
     if not args.is_optimisation:
         # Save the trained generator model.
         torch.save(generator, os.path.join(results_directory, 'generator.pth'))
+        return plot_log, generator, test_data
     if args.is_optimisation:
         return plot_log, generator, test_data
 
