@@ -22,7 +22,7 @@ if __name__ == "__main__":
         help="The argument file contains all arguments needed to train "
         "the model.")
     parser.add_argument(
-        '-n', dest='n_experiments', default=10,
+        '-n', dest='n_experiments', default=20,
         help="Number of experiments.")
     parser.add_argument(
         '--device', default='cuda',
@@ -36,12 +36,12 @@ if __name__ == "__main__":
     arguments["experiment_num"] = 1000
     arguments["is_optimisation"] = 0
     arguments["device"] = args.device
+    arguments["eval_interval"] = arguments["n_epochs"] - 1
 
     psnr_plot = []
 
-    # Create percentages to experiment on. Skip the first and last elements
-    # since either the train or test set for either of these will be empty.
-    percentages = np.linspace(0, 1, args.n_experiments + 2)[1:-1]
+    # Create percentages to experiment on.
+    percentages = np.linspace(0.1, 0.9, args.n_experiments)
     percentages_display = [f"{100*(1-value):.1f}%" for value in percentages]
     for idx, percentage in enumerate(percentages):
         arguments["test_percentage"] = float(percentage)
