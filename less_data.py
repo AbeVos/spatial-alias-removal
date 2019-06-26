@@ -29,6 +29,11 @@ if __name__ == "__main__":
         help="The device to train the models on.")
     args = parser.parse_args()
 
+    # Create a csv file to store results.
+    csv_path = 'less_data.csv'
+    with open(csv_path, 'w') as file:
+        file.write("test_percentage;psnr;ssim")
+
     with open(args.argument_file) as json_file:
         arguments = json.load(json_file)
 
@@ -39,6 +44,7 @@ if __name__ == "__main__":
     arguments["eval_interval"] = arguments["n_epochs"] - 1
 
     psnr_plot = []
+    ssim_plot = []
 
     # Create percentages to experiment on.
     percentages = np.linspace(0.1, 0.9, args.n_experiments)
@@ -64,14 +70,19 @@ if __name__ == "__main__":
         # Train the model with the loaded arguments.
         plot_log, _, _ = main(model_args)
         psnr = plot_log['psnr_val'][-1]
+        ssim = plot_log['ssim_val'][-1]
 
         # psnr = np.random.random(1)
         psnr_plot.append(psnr)
+        ssim_plot.append(ssim)
+
+        with open('less_data.csv', 'a') as file:
+            file.write(f"{percentage};{psnr};{ssim}")
 
         plt.figure()
         plt.plot(percentages_display[:idx+1], psnr_plot)
         plt.xlabel("Ratio of data used for training (%)")
         plt.ylabel("Test set PSNR")
         plt.tight_layout()
-        plt.savefig("less_data.png")
+        plt.savefig("less_data.pdf")
         plt.close()

@@ -3,7 +3,7 @@
   "filename_x": "data_20_big",
   "filename_y": "data_10_big",
   "test_percentage": 0.1,
-  "model": "SRCNN",
+  "model": "VDSR",
   "latent_dim": 256,
   "num_res_blocks": 4,
   "n_epochs": 21,
