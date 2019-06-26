@@ -11,8 +11,8 @@ from math import log10
 from statistics import mean
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
-
-from dataset import Data
+import pytorch_ssim
+from dataset import Data, ToTensor, RandomHorizontalFlip
 from models import SRCNN, Discriminator, EDSR, VDSR
 
 
@@ -149,8 +149,9 @@ def iter_epoch(
 
         psnr = 10 * log10(1 / nn.functional.mse_loss(
             sures_batch, hires_batch).item())
+        ssim = pytorch_ssim.ssim(sures_batch, hires_batch)
 
-        return loss_G.item(), psnr
+        return loss_G.item(), psnr, ssim.item()
 
     G, D, D_fk = models
     optim_G, optim_D, optim_D_fk = optimizers
@@ -163,6 +164,7 @@ def iter_epoch(
     mean_loss_D = []
     mean_loss_D_fk = []
     mean_psnr = []
+    mean_ssim = []
 
     content_criterion = reconstruction_criterion
     criterion = nn.BCEWithLogitsLoss()
@@ -192,18 +194,21 @@ def iter_epoch(
                 loss_D_fk = update_discriminator(
                     D_fk, lores_batch, hires_batch, use_fk_loss=True)
 
-        loss_G, psnr = update_generator(lores_batch, hires_batch, use_gan)
+        loss_G, psnr, ssim = update_generator(lores_batch, hires_batch, use_gan)
 
         mean_loss_G.append(loss_G)
         mean_loss_D.append(loss_D)
         mean_loss_D_fk.append(loss_D_fk)
         mean_psnr.append(psnr)
 
+        mean_ssim.append(ssim)
+
     return {
         'G': mean(mean_loss_G),
         'D': mean(mean_loss_D),
         'D_fk': mean(mean_loss_D_fk),
-        'psnr': mean(mean_psnr)
+        'psnr': mean(mean_psnr),
+        'ssim': mean(mean_ssim)
     }
 
 
@@ -235,7 +240,8 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
             plt.title(title)
 
         plt.imshow(image.squeeze().detach().cpu(),
-                   interpolation='none', cmap=cmap)
+                   interpolation='none', cmap=cmap, 
+                   vmin=0, vmax=1)
         plt.axis('off')
 
     dataloader = DataLoader(dataset, shuffle=False, batch_size=2)
@@ -268,9 +274,9 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
 
     plt.tight_layout()
     if not is_train:
-        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}.png'))
+        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}.pdf'))
     else:
-        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}_train.png'))
+        plt.savefig(os.path.join(directory, f'samples_{epoch:03d}_train.pdf'))
     plt.close()
 
 
@@ -315,12 +321,17 @@ def main(args):
     # TODO : Add normalisation  transforms.Normalize(
     #   torch.tensor(-4.4713e-07).float(),
     #   torch.tensor(0.1018).float())
+    # TODO: Add more data augmentation transforms.
+    data_transforms = transforms.Compose([
+      #  RandomHorizontalFlip(),
+        ToTensor()
+    ])
+
     dataset = Data(
         args.filename_x, args.filename_y, args.data_root,
-        transforms=transforms.Compose([
-            transforms.ToTensor(),
-        ])
-    )
+        transform=data_transforms)
+    print(len(dataset))
+
     if not args.is_optimisation:
         print(f"Data sizes, input: {dataset.input_dim}, output: "
               f"{dataset.output_dim}, Fk: {dataset.output_dim_fk}")
@@ -387,7 +398,7 @@ def main(args):
         # Report model performance.
         if not args.is_optimisation:
             print(f"Epoch: {epoch}, G: {loss['G']}, D: {loss['D']}, "
-                  f"PSNR: {loss['psnr']}")
+                  f"PSNR: {loss['psnr']}, SSIM: {loss['ssim']}")
         plot_log['G'].append(loss['G'])
         plot_log['D'].append(loss['D'])
 
@@ -403,11 +414,12 @@ def main(args):
                 use_noisy_labels=args.is_noisy_label)
             if not args.is_optimisation:
                 print(f"Validation on epoch: {epoch}, G: {loss_val['G']}, "
-                      f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}")
+                      f"D: {loss_val['D']}, PSNR: {loss_val['psnr']}, SSIM: {loss_val['ssim']}")
 
             plot_log['G_val'].append(loss_val['G'])
             plot_log['D_val'].append(loss_val['D'])
             plot_log['psnr_val'].append(loss_val['psnr'])
+            plot_log['ssim_val'].append(loss_val['ssim'])
 
             # Update scheduler based on PSNR or separate model losses.
             if args.is_psnr_step:
@@ -440,9 +452,24 @@ def main(args):
     if not args.is_optimisation:
         # Save the trained generator model.
         torch.save(generator, os.path.join(results_directory, 'generator.pth'))
+
+        if args.save_test_dataset:
+            list_x = []
+            list_y = []
+            for sample in test_data:
+                list_x.append(sample['x'].unsqueeze(0))
+                list_y.append(sample['y'].unsqueeze(0))
+            tensor_x = torch.cat(list_x, 0)
+            tensor_y = torch.cat(list_y, 0)
+            data_folder_for_results = 'final/data'
+            os.makedirs(data_folder_for_results, exist_ok=True)
+            torch.save(tensor_x, f'{data_folder_for_results}/data_x_{args.experiment_num}.pt')
+            torch.save(tensor_y, f'{data_folder_for_results}/data_y_{args.experiment_num}.pt')
+
         return plot_log, generator, test_data
     if args.is_optimisation:
-        return plot_log, generator, test_data
+        __, test_data = random_split(test_data, [len(test_data)-2, 2])
+        return plot_log, generator.detach(), test_data
 
 
 if __name__ == "__main__":
@@ -471,11 +498,11 @@ if __name__ == "__main__":
     model_group = parser.add_argument_group('Model')
 
     model_group.add_argument(
-        '--model', type=str, default="VDSR",
+        '--model', type=str, default="EDSR",
         choices=['EDSR', 'SRCNN', "VDSR"],
         help="Model type.")
     model_group.add_argument(
-        '--latent_dim', type=int, default=256,
+        '--latent_dim', type=int, default=128,
         help="dimensionality of the latent space, only relevant for "
         "EDSR and VDSR")
     model_group.add_argument(
@@ -486,7 +513,7 @@ if __name__ == "__main__":
     training_group = parser.add_argument_group('Training')
 
     training_group.add_argument(
-        '--n_epochs', type=int, default=80,
+        '--n_epochs', type=int, default=50,
         help="number of epochs")
     training_group.add_argument(
         '--batch_size', type=int, default=8,
@@ -527,11 +554,15 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type=int, default=18,
+        '--experiment_num', type=int, default=26,
         help="Id of the experiment running")
     misc_group.add_argument(
         "--is_optimisation", type=int, default=0,
         help="True or False for whether the run is called by the hyperopt"
+    )
+    misc_group.add_argument(
+        "--save_test_dataset", type=int, default=1,
+        help="True or False for option to save test dataset "
     )
 
     args = parser.parse_args()

@@ -8,7 +8,7 @@ class SRCNN(nn.Module):
     http://personal.ie.cuhk.edu.hk/~ccloy/files/eccv_2014_deepresolution.pdf
     """
     def __init__(self, latent_dim=[64, 32], input_dim=(251, 61),
-                 output_dim=[251, 121]):
+                 output_dim=[251, 301]):
         super(SRCNN, self).__init__()
         self.output_dim = output_dim
 
@@ -27,7 +27,7 @@ class SRCNN(nn.Module):
     def forward(self, x):
         x_upscaled = nn.functional.interpolate(x, size=self.output_dim)
 
-        return torch.tanh(self.sequence(x_upscaled) + x_upscaled)
+        return self.sequence(x_upscaled) + x_upscaled
 
 
 class VDSR(nn.Module):
@@ -134,7 +134,7 @@ class EDSR(nn.Module):
         # out = self.upscale(out)
         out = self.conv_last(out)
 
-        return torch.tanh(out)
+        return out
 
 
 class Discriminator(nn.Module):
