@@ -330,7 +330,6 @@ def main(args):
     dataset = Data(
         args.filename_x, args.filename_y, args.data_root,
         transform=data_transforms)
-    print(len(dataset))
 
     if not args.is_optimisation:
         print(f"Data sizes, input: {dataset.input_dim}, output: "

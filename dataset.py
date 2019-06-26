@@ -58,8 +58,8 @@ class ToTensor(object):
         x, y = sample['x'], sample['y']
 
         return {
-            'x': torch.from_numpy(x.copy()),
-            'y': torch.from_numpy(y.copy())
+            'x': torch.from_numpy(x.copy()).unsqueeze(0),
+            'y': torch.from_numpy(y.copy()).unsqueeze(0)
         }
 
 

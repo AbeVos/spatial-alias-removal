@@ -22,7 +22,7 @@ if __name__ == "__main__":
         help="The argument file contains all arguments needed to train "
         "the model.")
     parser.add_argument(
-        '-n', dest='n_experiments', default=20,
+        '-n', dest='n_experiments', default=5,
         help="Number of experiments.")
     parser.add_argument(
         '--device', default='cuda',
@@ -32,16 +32,17 @@ if __name__ == "__main__":
     # Create a csv file to store results.
     csv_path = 'less_data.csv'
     with open(csv_path, 'w') as file:
-        file.write("test_percentage;psnr;ssim")
+        file.write("test_percentage;psnr;ssim\n")
 
     with open(args.argument_file) as json_file:
         arguments = json.load(json_file)
 
-    # Make sure the training will return its results.
+    # Override some arguments.
     arguments["experiment_num"] = 1000
     arguments["is_optimisation"] = 0
     arguments["device"] = args.device
     arguments["eval_interval"] = arguments["n_epochs"] - 1
+    arguments["save_test_dataset"] = 0
 
     psnr_plot = []
     ssim_plot = []
@@ -77,7 +78,7 @@ if __name__ == "__main__":
         ssim_plot.append(ssim)
 
         with open('less_data.csv', 'a') as file:
-            file.write(f"{percentage};{psnr};{ssim}")
+            file.write(f"{percentage};{psnr};{ssim}\n")
 
         plt.figure()
         plt.plot(percentages_display[:idx+1], psnr_plot)

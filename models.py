@@ -8,7 +8,7 @@ class SRCNN(nn.Module):
     http://personal.ie.cuhk.edu.hk/~ccloy/files/eccv_2014_deepresolution.pdf
     """
     def __init__(self, latent_dim=[64, 32], input_dim=(251, 61),
-                 output_dim=[251, 301]):
+                 output_dim=(251, 301)):
         super(SRCNN, self).__init__()
         self.output_dim = output_dim
 
