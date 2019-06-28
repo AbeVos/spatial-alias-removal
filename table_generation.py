@@ -42,7 +42,7 @@ def get_args_from_params(params):
     model_group = parser.add_argument_group('Model')
 
     model_group.add_argument(
-        '--model', type=str, default="EDSR",
+        '--model', type=str, default="VDSR",
         choices=['EDSR', 'SRCNN', "VDSR"],
         help="Model type.")
     model_group.add_argument(
@@ -57,7 +57,7 @@ def get_args_from_params(params):
     training_group = parser.add_argument_group('Training')
 
     training_group.add_argument(
-        '--n_epochs', type=int, default=10,
+        '--n_epochs', type=int, default=80,
         help="number of epochs")
     training_group.add_argument(
         '--batch_size', type=int, default=8,
@@ -69,7 +69,7 @@ def get_args_from_params(params):
         '--scheduler_patience', type=int, default="5",
         help="How many val epochs of no improvement to consider Plateau")
     training_group.add_argument(
-        '--is_psnr_step', type=int, default="0",
+        '--is_psnr_step', type=int, default="1",
         help="Use PSNR for scheduler or separate losses")
 
 
@@ -124,12 +124,13 @@ def main(args):
     results = []
     for param in params:
         if param[0]==2 and param[1]==0:
-            print("No reconstruction loss and no GAN")
+
+            print(f"Params: {param}, No reconstruction loss and no GAN")
         else:
             args = get_args_from_params(param)
             plot_log, __, __ = main_model(args)
-            print(f"Parameters {param} got PSNR of {plot_log['psnr_val']} and SSIM of {plot_log['ssim_val']}")
-            results.append((plot_log['psnr_val'], plot_log['ssim_val']))
+            print(f"Parameters {param} got PSNR of {plot_log['psnr_val'][-1]} and SSIM of {plot_log['ssim_val'][-1]}")
+            results.append((plot_log['psnr_val'][-1], plot_log['ssim_val'][-1]))
 
     with open('table.txt', 'w') as f:
         for item in results:

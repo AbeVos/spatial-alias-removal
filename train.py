@@ -240,8 +240,7 @@ def plot_samples(generator, dataset, epoch, device='cuda', directory='image',
             plt.title(title)
 
         plt.imshow(image.squeeze().detach().cpu(),
-                   interpolation='none', cmap=cmap, 
-                   vmin=0, vmax=1)
+                   interpolation='none', cmap=cmap)
         plt.axis('off')
 
     dataloader = DataLoader(dataset, shuffle=False, batch_size=2)
@@ -330,7 +329,7 @@ def main(args):
     dataset = Data(
         args.filename_x, args.filename_y, args.data_root,
         transform=data_transforms)
-    print(len(dataset))
+
 
     if not args.is_optimisation:
         print(f"Data sizes, input: {dataset.input_dim}, output: "
@@ -467,7 +466,7 @@ def main(args):
 
     if args.is_optimisation:
         __, test_data = random_split(test_data, [len(test_data)-2, 2])
-        return plot_log, generator.detach(), test_data
+        return plot_log, generator, test_data
 
 
 if __name__ == "__main__":
@@ -491,12 +490,15 @@ if __name__ == "__main__":
     data_group.add_argument(
         '--test_percentage', type=float, default=0.1,
         help="Size of the test set")
+    data_group.add_argument(
+        '--val_percentage', type=float, default=0.1,
+        help="Size of the test set")
 
     # Model arguments.
     model_group = parser.add_argument_group('Model')
 
     model_group.add_argument(
-        '--model', type=str, default="EDSR",
+        '--model', type=str, default="VDSR",
         choices=['EDSR', 'SRCNN', "VDSR"],
         help="Model type.")
     model_group.add_argument(
@@ -504,14 +506,14 @@ if __name__ == "__main__":
         help="dimensionality of the latent space, only relevant for "
         "EDSR and VDSR")
     model_group.add_argument(
-        '--num_res_blocks', type=int, default=4,
+        '--num_res_blocks', type=int, default=2,
         help="Number of resblocks in model, only relevant for EDSR and VDSR")
 
     # Training arguments.
     training_group = parser.add_argument_group('Training')
 
     training_group.add_argument(
-        '--n_epochs', type=int, default=50,
+        '--n_epochs', type=int, default=100,
         help="number of epochs")
     training_group.add_argument(
         '--batch_size', type=int, default=8,
@@ -552,7 +554,7 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type=int, default=26,
+        '--experiment_num', type=int, default=29,
         help="Id of the experiment running")
     misc_group.add_argument(
         "--is_optimisation", type=int, default=0,
