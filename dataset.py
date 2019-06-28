@@ -1,3 +1,6 @@
+"""
+Define a Dataset model that inherits from Pytorch's base class.
+"""
 import os 
 import random
 import numpy as np
