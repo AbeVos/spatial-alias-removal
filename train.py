@@ -335,7 +335,8 @@ def main(args):
         print(f"Data sizes, input: {dataset.input_dim}, output: "
               f"{dataset.output_dim}, Fk: {dataset.output_dim_fk}")
 
-    train_data, test_data = split_dataset(dataset, args.test_percentage)
+    train_data, test_data = split_dataset(dataset, args.test_percentage +  args.val_percentage )
+    test_data, val_data = split_dataset(test_data, 0.5 )
 
     # Initialize generator model.
     if args.model == 'SRCNN':
@@ -406,7 +407,7 @@ def main(args):
                 or (args.is_optimisation and epoch == args.n_epochs - 1):
             loss_val = iter_epoch(
                 (generator, discriminator, discriminator_fk),
-                (None, None, None), test_data, device,
+                (None, None, None), val_data, device,
                 batch_size=args.batch_size, eval=True,
                 reconstruction_criterion=reconstruction_criterion,
                 use_gan=args.is_gan, use_fk_loss=args.use_fk_loss,
@@ -441,7 +442,7 @@ def main(args):
         if not args.is_optimisation:
             # Plot results.
             if epoch % args.save_interval == 0:
-                plot_samples(generator, test_data, epoch, device,
+                plot_samples(generator, val_data, epoch, device,
                              results_directory)
                 plot_samples(generator, train_data, epoch, device,
                              results_directory, is_train=True)
