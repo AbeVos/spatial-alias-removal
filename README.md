@@ -5,7 +5,7 @@ We apply deep learning super-resolution in order to up-scale the data by a facto
 Our modified VDSR model produces good qualitative and quantitative results on our test set and succeeds at removing the aliasing.
 
 This repository contains code to train a superresolution network from scratch and apply it to new data.
-Other scripts are included to perform the experiments and hyperparameter tuning as described in the accompanying article [link TBA].
+Other scripts are included to perform the experiments and hyperparameter tuning as described in the [accompanying article]().
 
 ## Dependencies
 
