@@ -473,6 +473,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
+        description="Train a superresolution model for reducing spatial "
+        "aliasing in seismic data.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # Data arguments.
