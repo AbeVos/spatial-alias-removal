@@ -145,22 +145,32 @@ def main(hyper_args):
         }
 
     #initial distribution of hyper-parameter space
-    space ={"num_epochs":hp.quniform('num_epochs', 1, 40, 1),
-            "model_choice": hp.choice('model_choice',
-                                      [{'model': 'EDSR', 'latent_dim': hp.quniform('latent_dim_edsr', 32, 257, 1), 'num_res_blocks': hp.quniform('num_res_block_edsr', 1, 12, 1)},
-                                       {'model': 'VDSR', 'latent_dim': hp.quniform('latent_dim_vdsr', 32, 257, 1), 'num_res_blocks': hp.quniform('num_blocks_vdsr', 1, 12, 1)},
-                                       {'model': 'SRCNN', 'latent_dim': 0, 'num_res_blocks': 0}]),
-            "batch_size": hp.quniform("batch_size", 2, 12, 1),
-            "lr": hp.loguniform("lr", -15, 0),
-            "scheduler_patience": hp.quniform("scheduler_patience", 1, 30, 1),
-            "is_psnr_step": hp.randint("is_psnr_step", 2),
-            "criterion_type": hp.choice("criterion_type", ["MSE", "L1", "None"]),
-            "is_gan": hp.randint("is_gan", 2),
-            "is_noisy_label": hp.randint("is_noisy_label", 2),
-            "is_fk_loss": hp.randint("is_fk_loss", 2),
-            "eval_interval": hp.quniform("eval_interval", 1, 15, 1)
-
-            }
+    space ={
+        "num_epochs":hp.quniform('num_epochs', 1, 40, 1),
+        "model_choice": hp.choice(
+            'model_choice', [{
+                'model': 'EDSR',
+                'latent_dim': hp.quniform('latent_dim_edsr', 32, 257, 1),
+                'num_res_blocks': hp.quniform('num_res_block_edsr', 1, 12, 1)
+            }, {
+                'model': 'VDSR',
+                'latent_dim': hp.quniform('latent_dim_vdsr', 32, 257, 1),
+                'num_res_blocks': hp.quniform('num_blocks_vdsr', 1, 12, 1)
+            }, {
+                'model': 'SRCNN',
+                'latent_dim': 0,
+                'num_res_blocks': 0
+            }]),
+        "batch_size": hp.quniform("batch_size", 2, 12, 1),
+        "lr": hp.loguniform("lr", -15, 0),
+        "scheduler_patience": hp.quniform("scheduler_patience", 1, 30, 1),
+        "is_psnr_step": hp.randint("is_psnr_step", 2),
+        "criterion_type": hp.choice("criterion_type", ["MSE", "L1", "None"]),
+        "is_gan": hp.randint("is_gan", 2),
+        "is_noisy_label": hp.randint("is_noisy_label", 2),
+        "is_fk_loss": hp.randint("is_fk_loss", 2),
+        "eval_interval": hp.quniform("eval_interval", 1, 15, 1)
+    }
 
     #getting directory
     results_directory = hyper_args.results_folder
