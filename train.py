@@ -359,17 +359,20 @@ def main(args):
         torch.save(generator, os.path.join(results_directory, 'generator.pth'))
 
         if args.save_test_dataset:
-            list_x = []
-            list_y = []
-            for sample in test_data:
-                list_x.append(sample['x'].unsqueeze(0))
-                list_y.append(sample['y'].unsqueeze(0))
-            tensor_x = torch.cat(list_x, 0)
-            tensor_y = torch.cat(list_y, 0)
-            data_folder_for_results = 'final/data'
-            os.makedirs(data_folder_for_results, exist_ok=True)
-            torch.save(tensor_x, f'{data_folder_for_results}/data_x_{args.experiment_num}.pt')
-            torch.save(tensor_y, f'{data_folder_for_results}/data_y_{args.experiment_num}.pt')
+            sets_name = ['test', 'val', 'train']
+            sets = [test_data, val_data, train_data]
+            for name, d_set in zip(sets_name, sets):
+                list_x = []
+                list_y = []
+                for sample in d_set:
+                    list_x.append(sample['x'].unsqueeze(0))
+                    list_y.append(sample['y'].unsqueeze(0))
+                tensor_x = torch.cat(list_x, 0)
+                tensor_y = torch.cat(list_y, 0)
+                data_folder_for_results = 'final/data'
+                os.makedirs(data_folder_for_results, exist_ok=True)
+                torch.save(tensor_x, f'{data_folder_for_results}/{name}_data_x_{args.experiment_num}.pt')
+                torch.save(tensor_y, f'{data_folder_for_results}/{name}_data_y_{args.experiment_num}.pt')
 
         return plot_log, generator, test_data
     if args.is_optimisation:
