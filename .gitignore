@@ -108,6 +108,6 @@ venv.bak/
 .idea/
 images/
 Data/
-Data_big/
+
 *.zip
 *.swp
