@@ -124,7 +124,7 @@ def iter_epoch(
         lores_batch = sample['x'].to(device).float()
         hires_batch = sample['y'].to(device).float()
 
-        #ssim to add here
+        #ssim to add
         loss_G, psnr = update_generator(lores_batch, hires_batch)
 
         mean_loss_G.append(loss_G)
@@ -352,7 +352,7 @@ def main(args):
                 plot_samples(generator, train_data, epoch, device,
                              results_directory, is_train=True)
 
-            save_loss_plot(plot_log['G'], plot_log['D'], results_directory)
+            save_loss_plot(plot_log['G'], results_directory)
 
     if not args.is_optimisation:
         # Save the trained generator model.
