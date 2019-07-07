@@ -461,7 +461,7 @@ if __name__ == "__main__":
         '--device', type=str, default="cpu",
         help="Training device 'cpu' or 'cuda:0'")
     misc_group.add_argument(
-        '--experiment_num', type=int, default=29,
+        '--experiment_num', type=int, default=31,
         help="Id of the experiment running")
     misc_group.add_argument(
         "--is_optimisation", type=int, default=0,
