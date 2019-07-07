@@ -211,7 +211,7 @@ def save_loss_plot(loss_g, directory, is_val=False, name=None):
     plt.figure()
     plt.plot(loss_g, label="Loss")
     plt.legend()
-
+    print(directory)
     if is_val:
         if name is None:
             plt.savefig(f"{directory}/loss_val.png")
