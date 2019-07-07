@@ -214,14 +214,14 @@ def save_loss_plot(loss_g, directory, is_val=False, name=None):
 
     if is_val:
         if name is None:
-            plt.savefig(f"{directory}/gan_loss_val.png")
+            plt.savefig(f"{directory}/loss_val.png")
         else:
-            plt.savefig(f"{directory}/gan_loss_val_{name}.png")
+            plt.savefig(f"{directory}/loss_val_{name}.png")
     else:
         if name is None:
-            plt.savefig(f"{directory}/gan_loss.png")
+            plt.savefig(f"{directory}/loss.png")
         else:
-            plt.savefig(f"{directory}/gan_loss_{name}.png")
+            plt.savefig(f"{directory}/loss_{name}.png")
 
     plt.close()
 
