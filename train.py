@@ -341,8 +341,7 @@ def main(args):
                 scheduler_g.step(loss_val['G'])
 
             if not args.is_optimisation:
-                save_loss_plot(plot_log['G_val'],
-                               results_directory, is_val=True)
+                save_loss_plot(plot_log['G_val'], results_directory, is_val=True)
 
         if not args.is_optimisation:
             # Plot results.
