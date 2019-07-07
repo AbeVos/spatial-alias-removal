@@ -14,12 +14,12 @@ class SRCNN(nn.Module):
 
         self.sequence = nn.Sequential(
             nn.Conv2d(1, latent_dim[0], 9, padding=4),
-            nn.LeakyReLU(0.2),
-            nn.BatchNorm2d(latent_dim[0]),
+            nn.ReLU(),
+           # nn.BatchNorm2d(latent_dim[0]),
 
-            nn.Conv2d(latent_dim[0], latent_dim[1], 5, padding=2),
-            nn.LeakyReLU(0.2),
-            nn.BatchNorm2d(latent_dim[1]),
+            nn.Conv2d(latent_dim[0], latent_dim[1], 1, padding=0),
+            nn.ReLU(),
+            #nn.BatchNorm2d(latent_dim[1]),
 
             nn.Conv2d(latent_dim[1], 1, 5, padding=2),
         )
