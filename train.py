@@ -11,7 +11,7 @@ from math import log10
 from statistics import mean
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
-import pytorch_ssim
+#import pytorch_ssim
 from dataset import Data, ToTensor, RandomHorizontalFlip
 from models import SRCNN, Discriminator, EDSR, VDSR
 
@@ -40,9 +40,9 @@ def iter_epoch(
     Train both generator and discriminator for a single epoch.
     Parameters
     ----------
-    G, D : torch.nn.Module
-        Generator and discriminator models respectively.
-    optim_G, optim_D : torch.optim.Optimizer
+    G : torch.nn.Module
+        Generator  models respectively.
+    optim_G : torch.optim.Optimizer
         Optimizers for both the models. Using Adam is recommended.
     train_dataloader : torch.utils.data.Dataloader
         Dataloader of real images to train the discriminator on.
@@ -103,9 +103,9 @@ def iter_epoch(
 
         psnr = 10 * log10(1 / nn.functional.mse_loss(
             sures_batch, hires_batch).item())
-        ssim = pytorch_ssim.ssim(sures_batch, hires_batch)
+      #  ssim = pytorch_ssim.ssim(sures_batch, hires_batch)
 
-        return loss_G.item(), psnr, ssim.item()
+        return loss_G.item(), psnr#, ssim.item()
 
     G = models
     optim_G = optimizers
@@ -116,7 +116,7 @@ def iter_epoch(
 
     mean_loss_G = []
     mean_psnr = []
-    mean_ssim = []
+    #mean_ssim = []
 
     content_criterion = reconstruction_criterion
 
@@ -124,19 +124,19 @@ def iter_epoch(
         lores_batch = sample['x'].to(device).float()
         hires_batch = sample['y'].to(device).float()
 
-
-        loss_G, psnr, ssim = update_generator(lores_batch, hires_batch)
+        #ssim to add here
+        loss_G, psnr = update_generator(lores_batch, hires_batch)
 
         mean_loss_G.append(loss_G)
 
         mean_psnr.append(psnr)
 
-        mean_ssim.append(ssim)
+        #mean_ssim.append(ssim)
 
     return {
         'G': mean(mean_loss_G),
         'psnr': mean(mean_psnr),
-        'ssim': mean(mean_ssim)
+       # 'ssim': mean(mean_ssim)
     }
 
 
@@ -311,7 +311,7 @@ def main(args):
         # Report model performance.
         if not args.is_optimisation:
             print(f"Epoch: {epoch}, Loss: {loss['G']}, "
-                  f"PSNR: {loss['psnr']}, SSIM: {loss['ssim']}")
+                  f"PSNR: {loss['psnr']}")# SSIM: {loss['ssim']}")
         plot_log['G'].append(loss['G'])
 
 
@@ -326,11 +326,11 @@ def main(args):
                 , use_fk_loss=args.use_fk_loss)
             if not args.is_optimisation:
                 print(f"Validation on epoch: {epoch}, Loss: {loss_val['G']}, "
-                      f" PSNR: {loss_val['psnr']}, SSIM: {loss_val['ssim']}")
+                      f" PSNR: {loss_val['psnr']}")#, SSIM: {loss_val['ssim']}")
 
             plot_log['G_val'].append(loss_val['G'])
             plot_log['psnr_val'].append(loss_val['psnr'])
-            plot_log['ssim_val'].append(loss_val['ssim'])
+           # plot_log['ssim_val'].append(loss_val['ssim'])
 
             # Update scheduler based on PSNR or separate model losses.
             if args.is_psnr_step:
