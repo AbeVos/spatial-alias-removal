@@ -211,7 +211,6 @@ def save_loss_plot(loss_g, directory, is_val=False, name=None):
     plt.figure()
     plt.plot(loss_g, label="Loss")
     plt.legend()
-    print(directory)
     if is_val:
         if name is None:
             plt.savefig(f"{directory}/loss_val.png")
@@ -341,7 +340,8 @@ def main(args):
                 scheduler_g.step(loss_val['G'])
 
             if not args.is_optimisation:
-                save_loss_plot(plot_log['G_val'], results_directory, is_val=True)
+                pass
+                # save_loss_plot(plot_log['G_val'], results_directory, is_val=True)
 
         if not args.is_optimisation:
             # Plot results.
@@ -414,11 +414,11 @@ if __name__ == "__main__":
         choices=['EDSR', 'SRCNN', "VDSR"],
         help="Model type.")
     model_group.add_argument(
-        '--latent_dim', type=int, default=128,
+        '--latent_dim', type=int, default=256,
         help="dimensionality of the latent space, only relevant for "
         "EDSR and VDSR")
     model_group.add_argument(
-        '--num_res_blocks', type=int, default=2,
+        '--num_res_blocks', type=int, default=4,
         help="Number of resblocks in model, only relevant for EDSR and VDSR")
 
     # Training arguments.
